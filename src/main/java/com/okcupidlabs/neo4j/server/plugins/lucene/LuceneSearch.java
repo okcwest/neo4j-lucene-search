@@ -29,6 +29,7 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.WhitespaceAnalyzer;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.DisjunctionMaxQuery;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.similar.SimilarityQueries;
 
@@ -42,6 +43,7 @@ import java.util.logging.*;
 public class LuceneSearch {
 
     private static final String[] REQUIRED_PARAMETERS = {"query_spec", "index_name"};
+    private static final float DEFAULT_DISMAX_TIEBREAKER = (float)0.1;
     private static final Class defaultAnalyzerClass = WhitespaceAnalyzer.class; // don't instantiate
     
     private final Logger log = Logger.getLogger(LuceneSearch.class.getName());
@@ -117,17 +119,11 @@ public class LuceneSearch {
         // depending on how this is called, though, we may have a double or int in the properties
         Object minScoreObj = properties.get("min_score");
         if (minScoreObj != null) {
-          log.info("Found a min score of type " + minScoreObj.getClass().getName());
-          if (minScoreObj instanceof Double) {
-            log.info("Going to coerce min score of type Double to float");
-            minScore = (float) ((Double)minScoreObj).doubleValue();
-          } else if (minScoreObj instanceof Integer) {
-            log.info("Going to coerce min score of type Integer to float");
-            minScore = (float) ((Integer)minScoreObj).intValue();
-          } else {
-            log.warning("Could not coerce min score of type " 
-              + minScoreObj.getClass().getName() 
-              + " to a float. Using 0 min score.");
+          try {
+            minScore = objectToFloat(minScoreObj);
+          } catch (IllegalArgumentException iae) {
+            // just warn; this arg is optional.
+            log.warning("Ignoring illegal value for min_score: "+iae.getMessage());
           }
         }
 
@@ -241,6 +237,25 @@ public class LuceneSearch {
       }
     }
     
+    // numeric type handling is hinky.
+    // things may show up as doubles or ints but we usually want a float.
+    private float objectToFloat(Object o) throws IllegalArgumentException {
+      if (o == null) {
+        throw new IllegalArgumentException("Can't coerce null to a float.");
+      }
+      if (o instanceof Double) {
+        log.fine("Coercing Double to float");
+        return (float) ((Double)o).doubleValue();
+      } else if (o instanceof Integer) {
+        log.fine("Coercing Integer to float");
+        return (float) ((Integer)o).intValue();
+      } else if (o instanceof Float) { // never see this happen with InputFormat.
+        return ((Float)o).floatValue();
+      } else {
+        throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to a float.");
+      }
+    }
+    
     /**
      * Recursively build up a query object as described by the given query spec.
      * Use the given analyzer as needed.
@@ -257,9 +272,23 @@ public class LuceneSearch {
       // can support term, geo, sim, or a nested dismax.
       // only sim and dismax for now.
       switch (type) {
-        //case QueryType.DISMAX:
-          // there will be a queries list with other queries we can build recursively.
-          //break;
+        case DISMAX:
+          // there will be a list of maps, which contain other query specs for building up the query.
+          List<Map<String, Object>> subSpecs = (List<Map<String, Object>>)querySpec.get("subqueries");
+          if (subSpecs == null || subSpecs.size() == 0) {
+            throw new IllegalArgumentException("Dismax query must contain a list of valid subqueries");
+          }
+          float dismaxTieBreaker = DEFAULT_DISMAX_TIEBREAKER;
+          try {
+            dismaxTieBreaker = objectToFloat(querySpec.get("tiebreaker"));
+          } catch (IllegalArgumentException iae) {
+            log.info("Using default dismax tiebreaker: " + iae.getMessage());
+          }
+          List<Query> subQueries = new ArrayList<Query>();
+          for (Map<String, Object> subSpec : subSpecs) {
+            subQueries.add(buildQuery(indexName, subSpec));
+          }
+          return new DisjunctionMaxQuery(subQueries, dismaxTieBreaker);
         case SIM:
           // similarity query. should have keys for index key and query.
           String indexKey = (String)querySpec.get("index_key");

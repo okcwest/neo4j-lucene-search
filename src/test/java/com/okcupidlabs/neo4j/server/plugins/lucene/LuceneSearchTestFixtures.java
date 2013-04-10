@@ -50,6 +50,24 @@ public class LuceneSearchTestFixtures {
               "\"query\": \"President Obama\"" + // match case coz we are testing with whitespace analyzer
               "}" +
             "}";
+    
+    public static final String DISMAX_OBAMA_ROMNEY_FIXTURE = "{" +
+            "\"index_name\": \"" + INDEX_NAME + "\"," +
+            "\"min_score\": 0.1," +
+            "\"query_spec\": {" +
+              "\"type\": \"DISMAX\"," +
+              "\"subqueries\": [" +
+                "{\"type\": \"SIM\"," +
+                  "\"index_key\": \"text\"," +
+                  "\"query\": \"Obama\"" + // match case coz we are testing with whitespace analyzer
+                  "}," +
+                "{\"type\": \"SIM\"," +
+                  "\"index_key\": \"text\"," +
+                  "\"query\": \"Romney\"" + // match case coz we are testing with whitespace analyzer
+                  "}" +
+                "]" +
+              "}" +
+            "}";
 
     private static final Logger log = Logger.getLogger(LuceneSearchTestFixtures.class.getName());
 

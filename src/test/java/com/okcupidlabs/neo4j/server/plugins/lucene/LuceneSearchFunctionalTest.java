@@ -89,6 +89,24 @@ public class LuceneSearchFunctionalTest {
             assertTrue(false); // cause a test failure
         }
     }
+    
+    @Test
+    public void dismax() {
+      RestRequest restRequest = new RestRequest(server.baseUri().resolve(MOUNT_POINT), CLIENT);
+      JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.DISMAX_OBAMA_ROMNEY_FIXTURE);
+      assertEquals(200, response.getStatus());
+      String body = response.getEntity();
+      log.info("Got dismax response " + body);
+      try {
+          List responseList = objectMapper.readValue(body, List.class);
+          assertEquals(4, responseList.size()); // 4 high-quality nodes
+      } catch (Exception e) {
+          log.severe("Couldn't coerce response " + body + " to a list.");
+          assertTrue(false); // cause a test failure
+      }
+    }
+
+    
 
     @After
     public void tearDown() {

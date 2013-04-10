@@ -98,6 +98,13 @@ public class LuceneSearchTest {
         assertEquals(200, response.getStatus());
     }
 
+    @Test
+    public void dismax() {
+        final Response response = service.search(FORCE, LuceneSearchTestFixtures.DISMAX_OBAMA_ROMNEY_FIXTURE);
+        Object body = response.getEntity();
+        assertEquals(200, response.getStatus());
+    }
+
     @After
     public void tearDown() throws Exception {
         try {
