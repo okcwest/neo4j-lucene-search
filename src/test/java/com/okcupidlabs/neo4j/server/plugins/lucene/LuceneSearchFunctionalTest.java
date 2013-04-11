@@ -106,6 +106,29 @@ public class LuceneSearchFunctionalTest {
       }
     }
 
+    @Test
+    public void booleanBad() {
+      RestRequest restRequest = new RestRequest(server.baseUri().resolve(MOUNT_POINT), CLIENT);
+      JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.BOOLEAN_BAD_OCCURS_FIXTURE);
+      assertEquals(400, response.getStatus());
+    }
+
+    @Test
+    public void booleanGood() {
+      RestRequest restRequest = new RestRequest(server.baseUri().resolve(MOUNT_POINT), CLIENT);
+      JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.BOOLEAN_FIXTURE);
+      assertEquals(200, response.getStatus());
+      String body = response.getEntity();
+      log.info("Got boolean response " + body);
+      try {
+          List responseList = objectMapper.readValue(body, List.class);
+          assertEquals(3, responseList.size()); // 4 high-quality nodes
+      } catch (Exception e) {
+          log.severe("Couldn't coerce response " + body + " to a list.");
+          assertTrue(false); // cause a test failure
+      }
+    }
+
     
 
     @After

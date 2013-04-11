@@ -68,6 +68,50 @@ public class LuceneSearchTestFixtures {
                 "]" +
               "}" +
             "}";
+            
+    public static final String BOOLEAN_BAD_OCCURS_FIXTURE = "{" +
+            "\"index_name\": \"" + INDEX_NAME + "\"," +
+            "\"min_score\": 0.1," +
+            "\"query_spec\": {" +
+              "\"type\": \"BOOL\"," +
+              "\"clauses\": [" +
+                "{\"query_spec\": {" +
+                    "\"type\":\"TERM\"," +
+                    "\"index_key\": \"text\"," +
+                    "\"query\": \"President Obama\"" + // match case coz we are testing with whitespace analyzer
+                    "}" +
+                  "}" +
+                  "\"occurs\": \"CAN\"" +
+                  "}" +
+                "]" +
+              "}" +
+            "}";
+
+    public static final String BOOLEAN_FIXTURE = "{" +
+            "\"index_name\": \"" + INDEX_NAME + "\"," +
+            "\"min_score\": 0.1," +
+            "\"query_spec\": {" +
+              "\"type\": \"BOOL\"," +
+              "\"clauses\": [" +
+                "{\"query_spec\": {" +
+                    "\"type\":\"TERM\"," +
+                    "\"index_key\": \"text\"," +
+                    "\"query\": \"President\"" + // match case coz we are testing with whitespace analyzer
+                    "}," +
+                  "\"occurs\": \"MUST\"" +
+                  "}," +
+                "{\"query_spec\": {" +
+                    "\"type\":\"TERM\"," +
+                    "\"index_key\": \"text\"," +
+                    "\"query\": \"Obama\"" + // match case coz we are testing with whitespace analyzer
+                    "}," +
+                  "\"occurs\": \"SHOULD\"" +
+                  "}" +
+                "]" +
+              "}" +
+            "}";
+
+    
 
     private static final Logger log = Logger.getLogger(LuceneSearchTestFixtures.class.getName());
 

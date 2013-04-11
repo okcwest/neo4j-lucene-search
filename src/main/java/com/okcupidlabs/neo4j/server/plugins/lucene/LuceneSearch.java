@@ -29,6 +29,9 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.WhitespaceAnalyzer;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.DisjunctionMaxQuery;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.similar.SimilarityQueries;
@@ -218,6 +221,42 @@ public class LuceneSearch {
       }
       return similarityQuery;
     }
+    
+    private Query makeDismaxQuery(String indexName, List<Map<String, Object>> subSpecs, float tiebreaker) 
+        throws IllegalArgumentException 
+    {
+      List<Query> subQueries = new ArrayList<Query>();
+      for (Map<String, Object> subSpec : subSpecs) {
+        subQueries.add(buildQuery(indexName, subSpec));
+      }
+      return new DisjunctionMaxQuery(subQueries, tiebreaker);
+    }
+
+    private Query makeBooleanQuery(String indexName, List<Map<String, Object>> clauses) throws IllegalArgumentException {
+      BooleanQuery bQuery = new BooleanQuery();
+      for (Map<String, Object> clause : clauses) {
+        // should contain a query spec...
+        Map<String, Object> subSpec = (Map<String, Object>)clause.get("query_spec");
+        if (subSpec == null) {
+          throw new IllegalArgumentException("Can't construct a boolean clause: missing query spec.");
+        }
+        Query subQuery = null;
+        try {
+          subQuery = buildQuery(indexName, subSpec);
+        } catch (IllegalArgumentException iae) {
+          throw new IllegalArgumentException("Can't construct a boolean clause: bad query spec! " + iae.getMessage());
+        }
+        // also an OCCURS value.
+        BooleanClause.Occur occurs = null;
+        try {
+            occurs = Enum.valueOf(BooleanClause.Occur.class, (String)clause.get("occurs"));
+          } catch (NullPointerException npe) {
+            throw new IllegalArgumentException("Clause "+clause+" has missing or bad occurs value. Must be MUST|MUST_NOT|SHOULD.");
+        }
+        bQuery.add(new BooleanClause(subQuery, occurs));
+      }
+      return bQuery;
+    }
 
     private class ScoredNode {
       private Node node;
@@ -284,16 +323,25 @@ public class LuceneSearch {
           } catch (IllegalArgumentException iae) {
             log.info("Using default dismax tiebreaker: " + iae.getMessage());
           }
-          List<Query> subQueries = new ArrayList<Query>();
-          for (Map<String, Object> subSpec : subSpecs) {
-            subQueries.add(buildQuery(indexName, subSpec));
+          return makeDismaxQuery(indexName, subSpecs, dismaxTieBreaker);
+        case BOOL:
+          List<Map<String, Object>> clauses = (List<Map<String, Object>>)querySpec.get("clauses");
+          if (clauses == null || clauses.size() == 0) {
+            throw new IllegalArgumentException("Boolean query must contain a list of clauses.");
           }
-          return new DisjunctionMaxQuery(subQueries, dismaxTieBreaker);
+          return makeBooleanQuery(indexName, clauses);
+        case TERM:
+          String key = (String)querySpec.get("index_key");
+          String query = (String)querySpec.get("query");
+          if (key == null || query == null) {
+            throw new IllegalArgumentException("Trying to build a term query, but missing index key or query.");
+          }
+          return new TermQuery(new Term(key, query));
         case SIM:
           // similarity query. should have keys for index key and query.
           String indexKey = (String)querySpec.get("index_key");
           String simQueryString = (String)querySpec.get("query");
-          if (indexName == null || indexKey == null || simQueryString == null) {
+          if (indexKey == null || simQueryString == null) {
             throw new IllegalArgumentException("Trying to build a similarity query, but missing index key or query.");
           }
           return makeSimilarityQuery(indexName, indexKey, simQueryString);
