@@ -113,7 +113,7 @@ public class LuceneSearch {
           indexName = (String)properties.get("index_name");
           querySpec = (HashMap)properties.get("query_spec");
         } catch (ClassCastException cce) {
-          output.badRequest(cce);
+          return output.badRequest(cce);
         }
 
         // optionally trim off low-quality hits
