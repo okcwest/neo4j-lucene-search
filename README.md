@@ -128,4 +128,54 @@ The query_spec describes a query which may be nested indefinitely. It must conta
  }
 ```
 
+#### Sample Queries
+
+Dismax for records that match Obama or Romney
+
+```
+{"index_name": "content",
+  "min_score": 0.1,
+  "query_spec": {
+    "type": "DISMAX",
+    "subqueries": [
+      {"type": "SIM",
+        "index_key": "text",
+        "query": "Obama"
+        }
+      {"type": "SIM",
+        "index_key": "text",
+        "query": "Romney"
+        }
+      ]
+    }
+  }
+```
+
+Boolean query for records with President, optionally matching Obama. Boost scores for President matches.
+```
+{"index_name": "content",
+  "min_score": 0.1,
+  "query_spec": {
+    "type": "BOOLEAN",
+    "clauses": [
+      {"query_spec":
+        {"type": "TEXT",
+          "boost": 1.5,
+          "index_key": "text",
+          "query": "President"
+          },
+        "occurs": "MUST"
+        }
+      {"query_spec":
+        {"type": "TEXT",
+          "index_key": "text",
+          "query": "Obama"
+          },
+        "occurs": "SHOULD"
+        }
+      ]
+    }
+  }
+```
+
 
