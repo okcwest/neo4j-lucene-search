@@ -46,7 +46,7 @@ import java.util.logging.*;
 public class LuceneSearch {
 
     private static final String[] REQUIRED_PARAMETERS = {"query_spec", "index_name"};
-    private static final float DEFAULT_DISMAX_TIEBREAKER = (float)0.1;
+    private static final float DEFAULT_DISMAX_TIEBREAKER = 0.1f;
     private static final Class defaultAnalyzerClass = WhitespaceAnalyzer.class; // don't instantiate
     
     private final Logger log = Logger.getLogger(LuceneSearch.class.getName());
@@ -310,6 +310,7 @@ public class LuceneSearch {
       // what kind of query is this?
       // can support term, geo, sim, or a nested dismax.
       // only sim and dismax for now.
+      Query q = null;
       switch (type) {
         case DISMAX:
           // there will be a list of maps, which contain other query specs for building up the query.
@@ -323,20 +324,23 @@ public class LuceneSearch {
           } catch (IllegalArgumentException iae) {
             log.info("Using default dismax tiebreaker: " + iae.getMessage());
           }
-          return makeDismaxQuery(indexName, subSpecs, dismaxTieBreaker);
+          q = makeDismaxQuery(indexName, subSpecs, dismaxTieBreaker);
+          break;
         case BOOL:
           List<Map<String, Object>> clauses = (List<Map<String, Object>>)querySpec.get("clauses");
           if (clauses == null || clauses.size() == 0) {
             throw new IllegalArgumentException("Boolean query must contain a list of clauses.");
           }
-          return makeBooleanQuery(indexName, clauses);
+          q = makeBooleanQuery(indexName, clauses);
+          break;
         case TERM:
           String key = (String)querySpec.get("index_key");
-          String query = (String)querySpec.get("query");
-          if (key == null || query == null) {
+          String queryString = (String)querySpec.get("query");
+          if (key == null || queryString == null) {
             throw new IllegalArgumentException("Trying to build a term query, but missing index key or query.");
           }
-          return new TermQuery(new Term(key, query));
+          q = new TermQuery(new Term(key, queryString));
+          break;
         case SIM:
           // similarity query. should have keys for index key and query.
           String indexKey = (String)querySpec.get("index_key");
@@ -344,10 +348,20 @@ public class LuceneSearch {
           if (indexKey == null || simQueryString == null) {
             throw new IllegalArgumentException("Trying to build a similarity query, but missing index key or query.");
           }
-          return makeSimilarityQuery(indexName, indexKey, simQueryString);
+          q = makeSimilarityQuery(indexName, indexKey, simQueryString);
+          break;
         default:
           throw new IllegalArgumentException("Unsupported query type: "+type.name());
       }
+      // now that we have the query object, set the boost on it.
+      float boost = 1.0f; // default to no boost
+      try {
+        boost = objectToFloat(querySpec.get("boost"));
+      } catch (IllegalArgumentException iae) {
+        log.warning("Couldn't set boost on query of type " + type + ": " + iae.getMessage());
+      }
+      q.setBoost(boost);
+      return q;
     }
 
     /**

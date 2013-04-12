@@ -1,8 +1,8 @@
-# Lucene Similarity Search
+# Lucene Search
 
 ## Overview
 
-Allows a Lucene similarity search to be performed against any index. The plugin will attempt to discover the analyzer type used by the index, and fail over to a WhitespaceAnalyzer if the index's analyzer cannot be instantiated.
+Perform complex queries against a Lucene index.
 
 ## Installation
 
@@ -25,8 +25,8 @@ Results :
 Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
 
 [INFO]
-[INFO] --- maven-jar-plugin:2.3.1:jar (default-jar) @ neo4j-lucene-similarity-search ---
-[INFO] Building jar: /Users/barnett/workspace/neo4j-lucene-text-search/target/neo4j-lucene-similarity-search-0.1.jar
+[INFO] --- maven-jar-plugin:2.3.1:jar (default-jar) @ neo4j-lucene-search ---
+[INFO] Building jar: /Users/barnett/workspace/neo4j-lucene-search/target/neo4j-lucene-search-0.1.jar
 [INFO] ------------------------------------------------------------------------
 [INFO] BUILD SUCCESS
 [INFO] ------------------------------------------------------------------------
@@ -39,7 +39,7 @@ Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
 The important line is:
 
 ```
-[INFO] Building jar: /Users/barnett/workspace/neo4j-lucene-text-search/target/neo4j-lucene-similarity-search-0.1.jar
+[INFO] Building jar: /Users/barnett/workspace/neo4j-lucene-search/target/neo4j-lucene-search-0.1.jar
 ```
 
 which points you to the resulting JAR.
@@ -72,13 +72,11 @@ any valid URL path fragment you can mount the extension URLs anywhere you would 
 
 ## Usage
 
-This plugin provides a single endpoint for executing a similarity search:
-
-`/lucene/simsearch`
+The plugin provides a single endpoint, /search, which allows for a complex query to be specified against a given index.
 
 #### Description
 
-Queries the named index and key to find indexed nodes similar to the given text query.
+Queries the named index using the specified query, which may be complex and nested.
 
 #### Methods
 
@@ -89,13 +87,37 @@ POST
   <dt>index_name
   <dd>Name of node index to query. This node index must already exist.
 
-  <dt>index_key
-  <dd>Index key to inspect.
-
-  <dt>query
-  <dd>The text to match.
+  <dt>query_spec
+  <dd>A complex query specification, as given below.
 
   <dt><i>min_score (optional)</i>
   <dd>A threshold similarity score to trim off poor-quality results.
 </dl>
+
+The query_spec describes a query which may be nested indefinitely. It must contain a "type" string which is one of (DISMAX|BOOL|TERM|SIM), and may contain an optional "boost" numeric value. Additional fields are type-specific and are as follows:
+
+{"type": "DISMAX"
+ "subqueries": [$QUERY0 $QUERY1 ... $QUERYN]    // where $QUERYX is another valid query spec.
+ "tiebreaker": $tiebreakingvalue                // this field is optional
+ }
+
+{"type": "BOOL"
+ "clauses": [
+    {"query_spec": $QUERY0 // where $QUERYX is another valid query spec
+     "occurs": (MUST|SHOULD|MUST_NOT)
+     }
+    ...
+    ]
+ }
+
+{"type": "TERM"
+ "index_key": $FIELD_TO_SEARCH_IN
+ "query": $TERM_TO_FIND
+ }
+ 
+{"type": "SIM"
+ "index_key": $FIELD_TO_SEARCH_IN
+ "query": $TERM_TO_FIND
+ }
+
 

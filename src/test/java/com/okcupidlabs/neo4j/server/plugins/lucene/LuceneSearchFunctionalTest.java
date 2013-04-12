@@ -122,7 +122,7 @@ public class LuceneSearchFunctionalTest {
       log.info("Got boolean response " + body);
       try {
           List responseList = objectMapper.readValue(body, List.class);
-          assertEquals(3, responseList.size()); // 4 high-quality nodes
+          assertEquals(5, responseList.size()); // 5 nodes, because we boost President.
       } catch (Exception e) {
           log.severe("Couldn't coerce response " + body + " to a list.");
           assertTrue(false); // cause a test failure

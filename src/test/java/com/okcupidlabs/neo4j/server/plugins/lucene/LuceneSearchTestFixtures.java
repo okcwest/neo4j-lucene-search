@@ -95,6 +95,7 @@ public class LuceneSearchTestFixtures {
               "\"clauses\": [" +
                 "{\"query_spec\": {" +
                     "\"type\":\"TERM\"," +
+                    "\"boost\": 1.5," +
                     "\"index_key\": \"text\"," +
                     "\"query\": \"President\"" + // match case coz we are testing with whitespace analyzer
                     "}," +
