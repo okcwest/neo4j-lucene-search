@@ -96,11 +96,14 @@ POST
 
 The query_spec describes a query which may be nested indefinitely. It must contain a "type" string which is one of (DISMAX|BOOL|TERM|SIM), and may contain an optional "boost" numeric value. Additional fields are type-specific and are as follows:
 
+```
 {"type": "DISMAX"
  "subqueries": [$QUERY0 $QUERY1 ... $QUERYN]    // where $QUERYX is another valid query spec.
  "tiebreaker": $tiebreakingvalue                // this field is optional
  }
+```
 
+```
 {"type": "BOOL"
  "clauses": [
     {"query_spec": $QUERY0 // where $QUERYX is another valid query spec
@@ -109,15 +112,20 @@ The query_spec describes a query which may be nested indefinitely. It must conta
     ...
     ]
  }
+```
 
+```
 {"type": "TERM"
  "index_key": $FIELD_TO_SEARCH_IN
  "query": $TERM_TO_FIND
  }
+```
  
+```
 {"type": "SIM"
  "index_key": $FIELD_TO_SEARCH_IN
  "query": $TERM_TO_FIND
  }
+```
 
 
