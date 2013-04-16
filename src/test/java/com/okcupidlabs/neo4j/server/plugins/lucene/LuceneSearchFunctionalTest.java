@@ -130,6 +130,38 @@ public class LuceneSearchFunctionalTest {
     }
 
     
+    @Test
+    public void phrase() {
+      RestRequest restRequest = new RestRequest(server.baseUri().resolve(MOUNT_POINT), CLIENT);
+      JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.PHRASE_FIXTURE);
+      assertEquals(200, response.getStatus());
+      String body = response.getEntity();
+      log.info("Got phrase response " + body);
+      try {
+          List responseList = objectMapper.readValue(body, List.class);
+          assertEquals(2, responseList.size()); // exact matches only
+      } catch (Exception e) {
+          log.severe("Couldn't coerce response " + body + " to a list.");
+          assertTrue(false); // cause a test failure
+      }
+    }
+    
+    @Test
+    public void phraseSlop() {
+      RestRequest restRequest = new RestRequest(server.baseUri().resolve(MOUNT_POINT), CLIENT);
+      JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.PHRASE_SLOP_FIXTURE);
+      assertEquals(200, response.getStatus());
+      String body = response.getEntity();
+      log.info("Got phrase response with slop: " + body);
+      try {
+          List responseList = objectMapper.readValue(body, List.class);
+          assertEquals(2, responseList.size()); // accept President Barack Obama too.
+      } catch (Exception e) {
+          log.severe("Couldn't coerce response " + body + " to a list.");
+          assertTrue(false); // cause a test failure
+      }
+    }
+
 
     @After
     public void tearDown() {

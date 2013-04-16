@@ -112,6 +112,29 @@ public class LuceneSearchTestFixtures {
               "}" +
             "}";
 
+    public static final String PHRASE_FIXTURE = "{" +
+            "\"index_name\": \"" + INDEX_NAME + "\"," +
+            "\"min_score\": 0.1," +
+            "\"query_spec\": {" +
+              "\"type\":\"PHRASE\"," +
+              "\"boost\": 1.5," +
+              "\"index_key\": \"text\"," +
+              "\"query\": \"Barack Obama\"" + // match case coz we are testing with whitespace analyzer
+              "}" +
+            "}";
+
+    public static final String PHRASE_SLOP_FIXTURE = "{" +
+            "\"index_name\": \"" + INDEX_NAME + "\"," +
+            "\"min_score\": 0.1," +
+            "\"query_spec\": {" +
+              "\"type\":\"PHRASE\"," +
+              "\"boost\": 1.5," +
+              "\"index_key\": \"text\"," +
+              "\"query\": \"President Obama\"," + // match case coz we are testing with whitespace analyzer
+              "\"slop\": 1" +
+              "}" +
+            "}";
+
     
 
     private static final Logger log = Logger.getLogger(LuceneSearchTestFixtures.class.getName());

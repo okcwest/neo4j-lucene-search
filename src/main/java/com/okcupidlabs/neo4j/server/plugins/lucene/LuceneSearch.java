@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.ArrayList;
 import java.net.URI;
 import java.io.IOException;
+import java.io.StringReader;
 
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
@@ -27,8 +28,11 @@ import org.neo4j.server.rest.web.PropertyValueException;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.WhitespaceAnalyzer;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.PhraseQuery;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanClause.Occur;
@@ -208,6 +212,22 @@ public class LuceneSearch {
       return analyzer;
     }
     
+    private List<Term> extractTerms(Analyzer analyzer, String fieldName, String doc) throws IOException {
+      List<Term> terms = new ArrayList<Term>();
+      StringReader reader = new StringReader(doc);
+      TokenStream ts = analyzer.tokenStream(fieldName, reader);
+      CharTermAttribute termAtt = ts.addAttribute(CharTermAttribute.class);
+      try {
+        while (ts.incrementToken()) {
+          terms.add(new Term(fieldName, termAtt.toString()));
+        }
+      } catch (IOException ioe) {
+        // fail with a more descriptive exception
+        throw new IOException("Failed extracting terms from string '"+doc+"': "+ioe.getMessage());
+      }
+      return terms;
+    }
+    
     private Query makeSimilarityQuery(String indexName, String key, String query) {
       Analyzer analyzer = getIndexAnalyzer(indexName);
       // set up a similarity query with the inbound object and analyzer, and no stop words
@@ -217,9 +237,21 @@ public class LuceneSearch {
       } catch (IOException e) {
         // per lucene docs, this can't actually happen. for argument's sake, log and make a junk term query instead.
         log.warning("Impossible exception encountered when forming the similarity query. Searching as term instead.");
-        similarityQuery = new TermQuery(new Term(query));
+        similarityQuery = new TermQuery(new Term(key, query));
       }
       return similarityQuery;
+    }
+    
+    private Query makePhraseQuery(String indexName, String key, String query, int slop) throws IOException {
+      // get the analyzer, so that we can transform the query into terms
+      Analyzer analyzer = getIndexAnalyzer(indexName);
+      List<Term> terms = extractTerms(analyzer, key, query);
+      PhraseQuery q = new PhraseQuery();
+      for (Term term : terms) {
+        q.add(term);
+      }
+      q.setSlop(slop);
+      return q;
     }
     
     private Query makeDismaxQuery(String indexName, List<Map<String, Object>> subSpecs, float tiebreaker) 
@@ -295,6 +327,24 @@ public class LuceneSearch {
       }
     }
     
+    // get ints from any numeric type also, but warn on loss of precision.
+    private int objectToInt(Object o) throws IllegalArgumentException {
+      if (o == null) {
+        throw new IllegalArgumentException("Can't coerce null to an int.");
+      }
+      if (o instanceof Integer) {
+        return ((Integer)o).intValue();
+      } else if (o instanceof Double) {
+        log.warning("Coercing Double to int! Loss of precision.");
+        return (int) ((Double)o).doubleValue();
+      } else if (o instanceof Float) { // never see this happen with InputFormat.
+        log.warning("Coercing Float to int! Loss of precision.");
+        return (int) ((Float)o).floatValue();
+      } else {
+        throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to an int.");
+      }
+    }
+    
     /**
      * Recursively build up a query object as described by the given query spec.
      * Use the given analyzer as needed.
@@ -341,6 +391,27 @@ public class LuceneSearch {
           }
           q = new TermQuery(new Term(key, queryString));
           break;
+        case PHRASE:
+          String phraseKey = (String)querySpec.get("index_key");
+          String phraseString = (String)querySpec.get("query");
+          if (phraseKey == null || phraseString == null) {
+            throw new IllegalArgumentException("Trying to build a phrase query, but missing index key or query.");
+          }
+          int slop = 0;
+          Object slopObj = querySpec.get("slop");
+          if (slopObj != null) {
+            try {
+              slop = objectToInt(slopObj);
+            } catch (IllegalArgumentException iae) {
+              log.warning("Ignoring phrase slop: " + iae.getMessage());
+            }
+          }
+          try {
+            q = makePhraseQuery(indexName, phraseKey, phraseString, slop);
+          } catch (IOException e) {
+            throw new IllegalArgumentException("Failed creating phrase query: "+e.getMessage());
+          }
+          break;
         case SIM:
           // similarity query. should have keys for index key and query.
           String indexKey = (String)querySpec.get("index_key");
@@ -355,10 +426,13 @@ public class LuceneSearch {
       }
       // now that we have the query object, set the boost on it.
       float boost = 1.0f; // default to no boost
-      try {
-        boost = objectToFloat(querySpec.get("boost"));
-      } catch (IllegalArgumentException iae) {
-        log.warning("Couldn't set boost on query of type " + type + ": " + iae.getMessage());
+      Object boostObj = querySpec.get("boost");
+      if (boostObj != null) {
+        try {
+          boost = objectToFloat(querySpec.get("boost"));
+        } catch (IllegalArgumentException iae) {
+          log.warning("Couldn't set boost on query of type " + type + ": " + iae.getMessage());
+        }
       }
       q.setBoost(boost);
       return q;
