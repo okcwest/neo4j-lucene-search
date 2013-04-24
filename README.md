@@ -92,6 +92,10 @@ POST
 
   <dt><i>min_score (optional)</i>
   <dd>A threshold similarity score to trim off poor-quality results.
+
+  <dt><i>lat, lon, dist (optional)</i>
+  <dd>A latitude, longitude, and radius for constraining search results by geo. These must all be given, or they will all be ignored. Latitude and longitude should be given in degrees, and radius should be given in miles.
+
 </dl>
 
 The query_spec describes a query which may be nested indefinitely. It must contain a "type" string which is one of (DISMAX|BOOL|TERM|SIM), and may contain an optional "boost" numeric value. Additional fields are type-specific and are as follows:
