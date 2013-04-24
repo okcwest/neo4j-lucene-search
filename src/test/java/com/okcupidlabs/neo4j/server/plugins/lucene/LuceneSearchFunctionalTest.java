@@ -162,6 +162,22 @@ public class LuceneSearchFunctionalTest {
       }
     }
 
+    @Test
+    public void geoConstrained() {
+      RestRequest restRequest = new RestRequest(server.baseUri().resolve(MOUNT_POINT), CLIENT);
+      JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.GEO_CONSTRAINED_FIXTURE);
+      assertEquals(200, response.getStatus());
+      String body = response.getEntity();
+      log.info("Got geo-constrained response with body: " + body);
+      try {
+          List responseList = objectMapper.readValue(body, List.class);
+          assertEquals(2, responseList.size()); // one of them is in honolulu, too far.
+      } catch (Exception e) {
+          log.severe("Couldn't coerce response " + body + " to a list.");
+          assertTrue(false); // cause a test failure
+      }
+    }
+
 
     @After
     public void tearDown() {

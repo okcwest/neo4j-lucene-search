@@ -135,12 +135,37 @@ public class LuceneSearchTestFixtures {
               "}" +
             "}";
 
-    
+    public static final String GEO_CONSTRAINED_FIXTURE = "{" +
+            "\"index_name\": \"" + INDEX_NAME + "\"," +
+            "\"min_score\": 0.1," +
+            "\"lat\": 40.7142," + // new york
+            "\"lon\": -74.0064," +
+            "\"dist\": 300," +
+            "\"query_spec\": {" +
+              "\"type\":\"TERM\"," +
+              "\"index_key\": \"text\"," +
+              "\"query\": \"Obama\"" + // match case coz we are testing with whitespace analyzer
+              "}" +
+            "}";
+
 
     private static final Logger log = Logger.getLogger(LuceneSearchTestFixtures.class.getName());
-
+    
     // functions for populating the graph database with test data
     public static void populateDb(GraphDatabaseService db) {
+        // set up some locations to use
+        Map<String, Object> honoluluLatLong = new HashMap<String, Object>();
+        honoluluLatLong.put("lat", new Double(21.3069));
+        honoluluLatLong.put("lon", new Double(-157.8583));
+      
+        Map<String, Object> washingtonLatLong = new HashMap<String, Object>();
+        washingtonLatLong.put("lat", new Double(38.89));
+        washingtonLatLong.put("lon", new Double(-77.03));
+      
+        Map<String, Object> bostonLatLong = new HashMap<String, Object>();
+        bostonLatLong.put("lat", new Double(42.3583));
+        bostonLatLong.put("lon", new Double(-71.0603));
+      
         // need to index several text strings which have words in common
         Transaction tx = db.beginTx();
         try
@@ -148,10 +173,10 @@ public class LuceneSearchTestFixtures {
           Index<Node> index = initializeCleanIndex(db, DEFAULT_ANALYZER, INDEX_NAME);
           Node baseballNode = createIndexedNode(db, index, "Baseball was once considered America's national pastime.");
           Node presidentNode = createIndexedNode(db, index, "America elects a new President every four years, in November.");
-          Node obamaNode = createIndexedNode(db, index, "Barack Obama was born in Honolulu, Hawaii.");
-          Node romneyNode = createIndexedNode(db, index, "Mitt Romney ran for President of the United States of America in 2012");
-          Node obamaPresidentNode = createIndexedNode(db, index, "President Barack Obama gave the State of the Union address on Tuesday");
-          Node obamaBaseballNode = createIndexedNode(db, index, "President Obama threw out the first pitch of the 2012 baseball season.");
+          Node obamaNode = createIndexedNode(db, index, "Barack Obama was born in Honolulu, Hawaii.", honoluluLatLong);
+          Node romneyNode = createIndexedNode(db, index, "Mitt Romney ran for President of the United States of America in 2012", bostonLatLong);
+          Node obamaPresidentNode = createIndexedNode(db, index, "President Barack Obama gave the State of the Union address on Tuesday", washingtonLatLong);
+          Node obamaBaseballNode = createIndexedNode(db, index, "President Obama threw out the first pitch of the 2010 baseball season.", washingtonLatLong);
           Node mittBaseballNode = createIndexedNode(db, index, "A baseball mitt is worn on a pitcher's off hand.");
           Node romneyPresidentNode = createIndexedNode(db, index, "Romney's campaign for President suffered from his lack of a relatable image and his evident barking insanity.");
           tx.success();
@@ -181,8 +206,18 @@ public class LuceneSearchTestFixtures {
 
     // takes an index which is thus guaranteed to exist
     private static Node createIndexedNode(GraphDatabaseService db, Index<Node> index, String text) {
+      return createIndexedNode(db, index, text, null);
+    }
+    
+    private static Node createIndexedNode(GraphDatabaseService db, Index<Node> index, String text, Map<String, Object> props) {
         Node node = db.createNode();
         node.setProperty("text", text);
+        // set other properties from map
+        if (props != null) {
+          for (String key : props.keySet()) {
+            node.setProperty(key, props.get(key));
+          }
+        }
         index.add(node, "text", text);
         return node;
     }

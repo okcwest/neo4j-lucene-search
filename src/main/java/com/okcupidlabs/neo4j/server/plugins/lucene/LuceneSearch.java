@@ -40,6 +40,8 @@ import org.apache.lucene.search.DisjunctionMaxQuery;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.similar.SimilarityQueries;
 
+import org.apache.lucene.spatial.DistanceUtils;
+
 import java.util.logging.*;
 
 
@@ -133,6 +135,48 @@ public class LuceneSearch {
             log.warning("Ignoring illegal value for min_score: "+iae.getMessage());
           }
         }
+        
+        //optionally use geo constraints.
+        double lat = 200, lon = 200, dist = -1; // init to nonsense values
+        Object latObj = properties.get("lat");
+        if (latObj != null) {
+          try {
+            lat = objectToDouble(latObj);
+            if (lat > 90 || lat < -90)
+              throw new IllegalArgumentException("Latitude must be in the range 0 +- 90, but was "+lat);
+          } catch (IllegalArgumentException iae) {
+            // just warn; this arg is optional.
+            log.warning("Ignoring illegal value for latitude: "+iae.getMessage());
+            lat = 200;
+          }
+        }
+        
+        Object lonObj = properties.get("lon");
+        if (lonObj != null) {
+          try {
+            lon = objectToDouble(lonObj);
+            if (lon > 180 || lon < -180)
+              throw new IllegalArgumentException("Longitude must be in the range 0 +- 180, but was "+lon);
+          } catch (IllegalArgumentException iae) {
+            // just warn; this arg is optional.
+            log.warning("Ignoring illegal value for longitude: "+iae.getMessage());
+            lon = 200;
+          }
+        }
+        
+        Object distObj = properties.get("dist");
+        if (distObj != null) {
+          try {
+            dist = objectToDouble(distObj);
+            if (dist <= 0)
+              throw new IllegalArgumentException("Distance must be a positive value in miles, but was "+dist);
+          } catch (IllegalArgumentException iae) {
+            // just warn; this arg is optional.
+            log.warning("Ignoring illegal value for distance: "+iae.getMessage());
+            dist = -1;
+          }
+        }
+        
 
         // can't search an absent index
         if (!this.service.index().existsForNodes(indexName)) {
@@ -140,7 +184,7 @@ public class LuceneSearch {
                     new IllegalArgumentException("Index with index_name: " + indexName + " does not exist."));
         }
 
-        List<ScoredNode> searchResult = indexQuery(indexName, querySpec, minScore);
+        List<ScoredNode> searchResult = indexQuery(indexName, querySpec, minScore, lat, lon, dist);
         
         // build up a representation to be returned (there's got to be a better way!)
         List<ScoredNodeRepresentation> reprList = new ArrayList<ScoredNodeRepresentation>();
@@ -164,7 +208,10 @@ public class LuceneSearch {
     private List<ScoredNode> indexQuery(
             final String indexName,
             final Map<String, Object> querySpec,
-            final float minScore)
+            final float minScore,
+            final double lat,
+            final double lon,
+            final double dist)
     {
         // make sure the index contains the desired key
         // this call will create an index, if none was there, so the caller 
@@ -181,13 +228,42 @@ public class LuceneSearch {
           float score = queryResults.currentScore();
           if (score < minScore) {
             log.info("Dropping low-scoring node: score " + score + " < min score " + minScore);
-          } else {
-            log.info("Score " + score + " for node " + n + " passes threshold " + minScore);
-            resultsList.add(new ScoredNode(n, score));
+            continue;
+          } 
+          log.fine("Score " + score + " for node " + n + " passes threshold " + minScore);
+          // are we checking distances?
+          if (lat != 200 && lon != 200 && dist != -1) {
+            // see if this node has a lat/lon associated
+            try {
+              double nLat = objectToDouble(n.getProperty("lat"));
+              double nLon = objectToDouble(n.getProperty("lon"));
+              if (nLat < -90 || nLat > 90) {
+                log.warning("Node has a bogus value of "+nLat+" for latitude");
+              } else if (nLon < -180 || nLon > 180) {
+                log.warning("Node has a bogus value of "+nLon+" for longitude");
+              } else if (!inRadius (lat, lon, nLat, nLon, dist)) {
+                log.info("Dropping node that is too far away.");
+                continue;
+              }
+            } catch (NumberFormatException nfe) {
+              // do nothing. 
+            }
           }
+          log.fine("Adding node " + n + " with score " + score);
+          resultsList.add(new ScoredNode(n, score));
         }
         queryResults.close(); // must release the search result's resources.
         return resultsList;
+    }
+    
+    private boolean inRadius(double lat1, double lon1, double lat2, double lon2, double maxDist) {
+      double rLat1 = DistanceUtils.DEGREES_TO_RADIANS * lat1;
+      double rLon1 = DistanceUtils.DEGREES_TO_RADIANS * lon1;
+      double rLat2 = DistanceUtils.DEGREES_TO_RADIANS * lat2;
+      double rLon2 = DistanceUtils.DEGREES_TO_RADIANS * lon2;
+      double dist = DistanceUtils.haversine(rLat1, rLon1, rLat2, rLon2, DistanceUtils.EARTH_MEAN_RADIUS_MI);
+      log.fine("From ("+lat1+","+lon1+") to ("+lat2+","+lon2+") is "+dist+"mi");
+      return dist <= maxDist;
     }
     
     private Analyzer getIndexAnalyzer(String indexName) {
@@ -324,6 +400,23 @@ public class LuceneSearch {
         return ((Float)o).floatValue();
       } else {
         throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to a float.");
+      }
+    }
+    
+    private double objectToDouble(Object o) throws IllegalArgumentException {
+      if (o == null) {
+        throw new IllegalArgumentException("Can't coerce null to a double.");
+      }
+      if (o instanceof Float) { // never see this happen with InputFormat.
+        log.fine("Coercing Float to double");
+        return (double) ((Float)o).floatValue();
+      } else if (o instanceof Integer) {
+        log.fine("Coercing Integer to double");
+        return (double) ((Integer)o).intValue();
+      } else if (o instanceof Double) {
+        return ((Double)o).doubleValue();
+      } else {
+        throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to a double.");
       }
     }
     
