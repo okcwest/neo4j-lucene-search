@@ -126,57 +126,45 @@ public class LuceneSearch {
         // index query will need a float
         float minScore = 0;
         // depending on how this is called, though, we may have a double or int in the properties
-        Object minScoreObj = properties.get("min_score");
-        if (minScoreObj != null) {
-          try {
-            minScore = objectToFloat(minScoreObj);
-          } catch (IllegalArgumentException iae) {
-            // just warn; this arg is optional.
-            log.warning("Ignoring illegal value for min_score: "+iae.getMessage());
-          }
+        try {
+          minScore = getFloat(properties, "min_score");
+        } catch (IllegalArgumentException iae) {
+          log.warning("Ignoring illegal value for min_score: "+iae.getMessage());
         }
         
         //optionally use geo constraints.
         double lat = 200, lon = 200, dist = -1; // init to nonsense values
         Object latObj = properties.get("lat");
-        if (latObj != null) {
-          try {
-            lat = objectToDouble(latObj);
-            if (lat > 90 || lat < -90)
-              throw new IllegalArgumentException("Latitude must be in the range 0 +- 90, but was "+lat);
-          } catch (IllegalArgumentException iae) {
-            // just warn; this arg is optional.
-            log.warning("Ignoring illegal value for latitude: "+iae.getMessage());
-            lat = 200;
-          }
+        
+        try {
+          lat = getDouble(properties, "lat");
+          if (lat > 90 || lat < -90)
+            throw new IllegalArgumentException("Latitude must be in the range 0 +- 90, but was "+lat);
+          // just warn; this arg is optional.
+        } catch (IllegalArgumentException iae) {
+          log.warning("Ignoring illegal value for latitude: "+iae.getMessage());
+          lat = 200;
         }
         
-        Object lonObj = properties.get("lon");
-        if (lonObj != null) {
-          try {
-            lon = objectToDouble(lonObj);
-            if (lon > 180 || lon < -180)
-              throw new IllegalArgumentException("Longitude must be in the range 0 +- 180, but was "+lon);
-          } catch (IllegalArgumentException iae) {
-            // just warn; this arg is optional.
-            log.warning("Ignoring illegal value for longitude: "+iae.getMessage());
-            lon = 200;
-          }
+        try {
+          lon = getDouble(properties, "lon");
+          if (lon > 180 || lon < -180)
+            throw new IllegalArgumentException("Longitude must be in the range 0 +- 180, but was "+lon);
+          // just warn; this arg is optional.
+        } catch (IllegalArgumentException iae) {
+          log.warning("Ignoring illegal value for longitude: "+iae.getMessage());
+          lon = 200;
         }
         
-        Object distObj = properties.get("dist");
-        if (distObj != null) {
-          try {
-            dist = objectToDouble(distObj);
-            if (dist <= 0)
-              throw new IllegalArgumentException("Distance must be a positive value in miles, but was "+dist);
-          } catch (IllegalArgumentException iae) {
-            // just warn; this arg is optional.
-            log.warning("Ignoring illegal value for distance: "+iae.getMessage());
-            dist = -1;
-          }
+        try {
+          dist = getDouble(properties, "dist");
+          if (dist <= 0)
+            throw new IllegalArgumentException("Distance must be a positive value in miles, but was "+dist);
+          // just warn; this arg is optional.
+        } catch (IllegalArgumentException iae) {
+          log.warning("Ignoring illegal value for distance: "+iae.getMessage());
+          dist = -1;
         }
-        
 
         // can't search an absent index
         if (!this.service.index().existsForNodes(indexName)) {
@@ -235,8 +223,8 @@ public class LuceneSearch {
           if (lat != 200 && lon != 200 && dist != -1) {
             // see if this node has a lat/lon associated
             try {
-              double nLat = objectToDouble(n.getProperty("lat"));
-              double nLon = objectToDouble(n.getProperty("lon"));
+              double nLat = getDouble(n.getProperty("lat"));
+              double nLon = getDouble(n.getProperty("lon"));
               if (nLat < -90 || nLat > 90) {
                 log.warning("Node has a bogus value of "+nLat+" for latitude");
               } else if (nLon < -180 || nLon > 180) {
@@ -245,8 +233,8 @@ public class LuceneSearch {
                 log.info("Dropping node that is too far away.");
                 continue;
               }
-            } catch (NumberFormatException nfe) {
-              // do nothing. 
+            } catch (IllegalArgumentException iae) {
+              // do nothing.
             }
           }
           log.fine("Adding node " + n + " with score " + score);
@@ -384,56 +372,73 @@ public class LuceneSearch {
       }
     }
     
-    // numeric type handling is hinky.
-    // things may show up as doubles or ints but we usually want a float.
-    private float objectToFloat(Object o) throws IllegalArgumentException {
+    private float getFloat(Map<String, Object> props, String key) throws IllegalArgumentException {
+      Object value = props.get(key);
+      if (value == null)
+        throw new IllegalArgumentException("Property map has no value for key "+key);
+      try {
+        return getFloat(value);
+      } catch (IllegalArgumentException e) {
+        throw new IllegalArgumentException("Can't get a float for key "+key+" in property map: "+e.getMessage());
+      }
+    }
+    
+    private float getFloat(Object o) throws IllegalArgumentException {
       if (o == null) {
         throw new IllegalArgumentException("Can't coerce null to a float.");
       }
-      if (o instanceof Double) {
-        log.fine("Coercing Double to float");
-        return (float) ((Double)o).doubleValue();
-      } else if (o instanceof Integer) {
-        log.fine("Coercing Integer to float");
-        return (float) ((Integer)o).intValue();
-      } else if (o instanceof Float) { // never see this happen with InputFormat.
-        return ((Float)o).floatValue();
-      } else {
+      try {
+        return ((Number)o).floatValue();
+      } catch (ClassCastException e) {
         throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to a float.");
       }
     }
     
-    private double objectToDouble(Object o) throws IllegalArgumentException {
+    private double getDouble(Map<String, Object> props, String key) throws IllegalArgumentException {
+      Object value = props.get(key);
+      if (value == null)
+        throw new IllegalArgumentException("Property map has no value for key "+key);
+      try {
+        return getDouble(value);
+      } catch (IllegalArgumentException e) {
+        throw new IllegalArgumentException("Can't get a double for key "+key+" in property map: "+e.getMessage());
+      }
+    }
+    
+    private double getDouble(Object o) throws IllegalArgumentException {
       if (o == null) {
         throw new IllegalArgumentException("Can't coerce null to a double.");
       }
-      if (o instanceof Float) { // never see this happen with InputFormat.
-        log.fine("Coercing Float to double");
-        return (double) ((Float)o).floatValue();
-      } else if (o instanceof Integer) {
-        log.fine("Coercing Integer to double");
-        return (double) ((Integer)o).intValue();
-      } else if (o instanceof Double) {
-        return ((Double)o).doubleValue();
-      } else {
+      try {
+        return ((Number)o).doubleValue();
+      } catch (ClassCastException e) {
         throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to a double.");
       }
     }
     
     // get ints from any numeric type also, but warn on loss of precision.
-    private int objectToInt(Object o) throws IllegalArgumentException {
+    private int getInt(Map<String, Object> props, String key) throws IllegalArgumentException {
+      Object value = props.get(key);
+      if (value == null)
+        throw new IllegalArgumentException("Property map has no value for key "+key);
+      try {
+        return getInt(value);
+      } catch (IllegalArgumentException e) {
+        throw new IllegalArgumentException("Can't get an int for key "+key+" in property map: "+e.getMessage());
+      }
+    }
+    
+    private int getInt(Object o) throws IllegalArgumentException {
       if (o == null) {
         throw new IllegalArgumentException("Can't coerce null to an int.");
       }
-      if (o instanceof Integer) {
-        return ((Integer)o).intValue();
-      } else if (o instanceof Double) {
-        log.warning("Coercing Double to int! Loss of precision.");
-        return (int) ((Double)o).doubleValue();
-      } else if (o instanceof Float) { // never see this happen with InputFormat.
-        log.warning("Coercing Float to int! Loss of precision.");
-        return (int) ((Float)o).floatValue();
-      } else {
+      // warn on loss of precision!
+      if (o instanceof Double || o instanceof Float) {
+        log.warning("Coercing "+o.getClass().getName()+" to int! Loss of precision.");
+      }
+      try {
+        return ((Number)o).intValue();
+      } catch (ClassCastException e) {
         throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to an int.");
       }
     }
@@ -463,7 +468,7 @@ public class LuceneSearch {
           }
           float dismaxTieBreaker = DEFAULT_DISMAX_TIEBREAKER;
           try {
-            dismaxTieBreaker = objectToFloat(querySpec.get("tiebreaker"));
+            dismaxTieBreaker = getFloat(querySpec, "tiebreaker");
           } catch (IllegalArgumentException iae) {
             log.info("Using default dismax tiebreaker: " + iae.getMessage());
           }
@@ -491,13 +496,10 @@ public class LuceneSearch {
             throw new IllegalArgumentException("Trying to build a phrase query, but missing index key or query.");
           }
           int slop = 0;
-          Object slopObj = querySpec.get("slop");
-          if (slopObj != null) {
-            try {
-              slop = objectToInt(slopObj);
-            } catch (IllegalArgumentException iae) {
-              log.warning("Ignoring phrase slop: " + iae.getMessage());
-            }
+          try {
+            slop = getInt(querySpec, "slop");
+          } catch (IllegalArgumentException iae) {
+            log.warning("Ignoring phrase slop: " + iae.getMessage());
           }
           try {
             q = makePhraseQuery(indexName, phraseKey, phraseString, slop);
@@ -519,13 +521,10 @@ public class LuceneSearch {
       }
       // now that we have the query object, set the boost on it.
       float boost = 1.0f; // default to no boost
-      Object boostObj = querySpec.get("boost");
-      if (boostObj != null) {
-        try {
-          boost = objectToFloat(querySpec.get("boost"));
-        } catch (IllegalArgumentException iae) {
-          log.warning("Couldn't set boost on query of type " + type + ": " + iae.getMessage());
-        }
+      try {
+        boost = getFloat(querySpec, "boost");
+      } catch (IllegalArgumentException iae) {
+        log.warning("Couldn't set boost on query of type " + type + ": " + iae.getMessage());
       }
       q.setBoost(boost);
       return q;
