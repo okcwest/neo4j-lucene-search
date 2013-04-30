@@ -25,6 +25,7 @@ import org.neo4j.server.rest.domain.PropertySettingStrategy;
 import org.neo4j.server.rest.repr.*;
 import org.neo4j.server.rest.web.DatabaseActions;
 import org.neo4j.server.rest.web.PropertyValueException;
+import org.neo4j.index.lucene.ValueContext;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.WhitespaceAnalyzer;
@@ -51,9 +52,12 @@ import java.util.logging.*;
 @Path("/")
 public class LuceneSearch {
 
-    private static final String[] REQUIRED_PARAMETERS = {"query_spec", "index_name"};
+    private static final String[] REQUIRED_SEARCH_PARAMETERS = {"query_spec", "index_name"};
+    private static final String[] REQUIRED_GEO_INDEX_PARAMETERS = {"query_spec", "index_name"};
     private static final float DEFAULT_DISMAX_TIEBREAKER = 0.1f;
     private static final Class defaultAnalyzerClass = WhitespaceAnalyzer.class; // don't instantiate
+    
+    private static final String LAT_KEY = "lat", LON_KEY = "lon"; // where to index the geo data
     
     private final Logger log = Logger.getLogger(LuceneSearch.class.getName());
 
@@ -109,8 +113,8 @@ public class LuceneSearch {
             return output.badRequest(e);
         }
 
-        if(!ensureRequiredParameters(properties, REQUIRED_PARAMETERS)) {
-            return missingParameters(properties, REQUIRED_PARAMETERS);
+        if(!ensureRequiredParameters(properties, REQUIRED_SEARCH_PARAMETERS)) {
+            return missingParameters(properties, REQUIRED_SEARCH_PARAMETERS);
         }
 
         String indexName = null;
@@ -187,6 +191,65 @@ public class LuceneSearch {
         return output.ok(reprListRepr);
     }
 
+    @POST
+    @Path("/index/geo")
+    public Response geoIndex(
+                final @HeaderParam("Transaction") ForceMode force,
+                final String body)
+    {
+        final Map<String, Object> properties;
+        try {
+            log.fine("Reading properties map from " + body);
+            properties = input.readMap(body);
+        } catch (BadInputException e) {
+            log.warning("Broken input! Failed to decode " + body + ": " + e.getMessage());
+            return output.badRequest(e);
+        }
+
+        if(!ensureRequiredParameters(properties, REQUIRED_GEO_INDEX_PARAMETERS)) {
+            return missingParameters(properties, REQUIRED_GEO_INDEX_PARAMETERS);
+        }
+        
+        // need an index_name, node, and coordinates.
+        String indexName = null;
+        long nodeId = 0;
+        double lat = 200, lon = 200;
+        try {
+          indexName = (String)properties.get("index_name");
+          lat = getDouble(properties, "lat");
+          lon = getDouble(properties, "lon");
+          nodeId = getInt(properties, "node_id");
+        } catch (ClassCastException cce) {
+          return output.badRequest(cce);
+        }
+        
+        // get the named index
+        // can't search an absent index
+        if (!this.service.index().existsForNodes(indexName)) {
+            return output.badRequest(
+                    new IllegalArgumentException("Index with index_name: " + indexName + " does not exist."));
+        }
+        Index<Node> index = this.service.index().forNodes(indexName);
+        
+        // retrieve the node we want to index
+        Node node = null;
+        try {
+          node = this.service.getNodeById(nodeId);
+        } catch (NotFoundException nfe) {
+          return output.badRequest(nfe);
+        }
+                
+        // index the business. we can't actually use lucene spatial, 
+        // because neo4j doesn't expose the index at a low enough level.
+        ValueContext latValue = ValueContext.numeric(lat);
+        ValueContext lonValue = ValueContext.numeric(lon);
+        index.add(node, LAT_KEY, latValue);
+        index.add(node, LON_KEY, lonValue);
+        
+        // nothin' broke.
+        return output.ok(new NodeRepresentation(node));
+    }
+    
     /**
      * Search the named index, building a query as specified.
      * @param querySpec     a JSON representation of a query, which may be nested.
