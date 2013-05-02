@@ -148,21 +148,32 @@ public class LuceneSearchTestFixtures {
               "}" +
             "}";
 
+    public static final String GEO_SEARCH_FIXTURE = "{" +
+            "\"index_name\": \"" + INDEX_NAME + "\"," +
+            "\"min_score\": 0.1," +
+            "\"query_spec\": {" +
+              "\"type\":\"GEO\"," +
+              "\"lat\": 40.7142," + // new york
+              "\"lon\": -74.0064," +
+              "\"dist\": 300" +
+              "}" +
+            "}";
+
 
     private static final Logger log = Logger.getLogger(LuceneSearchTestFixtures.class.getName());
     
     // functions for populating the graph database with test data
     public static void populateDb(GraphDatabaseService db) {
         // set up some locations to use
-        Map<String, Object> honoluluLatLong = new HashMap<String, Object>();
+        PropertyMap<String, Object> honoluluLatLong = new PropertyMap<String, Object>();
         honoluluLatLong.put("lat", new Double(21.3069));
         honoluluLatLong.put("lon", new Double(-157.8583));
       
-        Map<String, Object> washingtonLatLong = new HashMap<String, Object>();
+        PropertyMap<String, Object> washingtonLatLong = new PropertyMap<String, Object>();
         washingtonLatLong.put("lat", new Double(38.89));
         washingtonLatLong.put("lon", new Double(-77.03));
       
-        Map<String, Object> bostonLatLong = new HashMap<String, Object>();
+        PropertyMap<String, Object> bostonLatLong = new PropertyMap<String, Object>();
         bostonLatLong.put("lat", new Double(42.3583));
         bostonLatLong.put("lon", new Double(-71.0603));
       
@@ -209,13 +220,17 @@ public class LuceneSearchTestFixtures {
       return createIndexedNode(db, index, text, null);
     }
     
-    private static Node createIndexedNode(GraphDatabaseService db, Index<Node> index, String text, Map<String, Object> props) {
+    private static Node createIndexedNode(GraphDatabaseService db, Index<Node> index, String text, PropertyMap<String, Object> props) {
         Node node = db.createNode();
         node.setProperty("text", text);
         // set other properties from map
         if (props != null) {
           for (String key : props.keySet()) {
             node.setProperty(key, props.get(key));
+          }
+          // if there are lat/long, index coords
+          if (props.containsKey("lat") && props.containsKey("lon")) {
+            LuceneSearch.geoIndex(db, index, node.getId(), props.getDouble("lat"), props.getDouble("lon"));
           }
         }
         index.add(node, "text", text);

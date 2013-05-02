@@ -34,6 +34,7 @@ import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.PhraseQuery;
+import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanClause.Occur;
@@ -42,6 +43,8 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.search.similar.SimilarityQueries;
 
 import org.apache.lucene.spatial.DistanceUtils;
+import org.apache.lucene.spatial.geometry.shape.LLRect;
+import org.apache.lucene.spatial.geometry.FloatLatLng;
 
 import java.util.logging.*;
 
@@ -53,7 +56,7 @@ import java.util.logging.*;
 public class LuceneSearch {
 
     private static final String[] REQUIRED_SEARCH_PARAMETERS = {"query_spec", "index_name"};
-    private static final String[] REQUIRED_GEO_INDEX_PARAMETERS = {"query_spec", "index_name"};
+    private static final String[] REQUIRED_GEO_INDEX_PARAMETERS = {"index_name", "node_id", "lat", "lon"};
     private static final float DEFAULT_DISMAX_TIEBREAKER = 0.1f;
     private static final Class defaultAnalyzerClass = WhitespaceAnalyzer.class; // don't instantiate
     
@@ -104,10 +107,10 @@ public class LuceneSearch {
                 final @HeaderParam("Transaction") ForceMode force,
                 final String body)
     {
-        final Map<String, Object> properties;
+        final PropertyMap<String, Object> properties;
         try {
             log.fine("Reading properties map from " + body);
-            properties = input.readMap(body);
+            properties = new PropertyMap<String, Object>(input.readMap(body));
         } catch (BadInputException e) {
             log.warning("Broken input! Failed to decode " + body + ": " + e.getMessage());
             return output.badRequest(e);
@@ -118,10 +121,10 @@ public class LuceneSearch {
         }
 
         String indexName = null;
-        Map<String, Object> querySpec = null;
+        PropertyMap<String, Object> querySpec = null;
         try {
           indexName = (String)properties.get("index_name");
-          querySpec = (HashMap)properties.get("query_spec");
+          querySpec = new PropertyMap((HashMap)properties.get("query_spec"));
         } catch (ClassCastException cce) {
           return output.badRequest(cce);
         }
@@ -131,17 +134,16 @@ public class LuceneSearch {
         float minScore = 0;
         // depending on how this is called, though, we may have a double or int in the properties
         try {
-          minScore = getFloat(properties, "min_score");
+          minScore = properties.getFloat("min_score");
         } catch (IllegalArgumentException iae) {
           log.warning("Ignoring illegal value for min_score: "+iae.getMessage());
         }
         
         //optionally use geo constraints.
         double lat = 200, lon = 200, dist = -1; // init to nonsense values
-        Object latObj = properties.get("lat");
-        
+
         try {
-          lat = getDouble(properties, "lat");
+          lat = properties.getDouble("lat");
           if (lat > 90 || lat < -90)
             throw new IllegalArgumentException("Latitude must be in the range 0 +- 90, but was "+lat);
           // just warn; this arg is optional.
@@ -151,7 +153,7 @@ public class LuceneSearch {
         }
         
         try {
-          lon = getDouble(properties, "lon");
+          lon = properties.getDouble("lon");
           if (lon > 180 || lon < -180)
             throw new IllegalArgumentException("Longitude must be in the range 0 +- 180, but was "+lon);
           // just warn; this arg is optional.
@@ -161,7 +163,7 @@ public class LuceneSearch {
         }
         
         try {
-          dist = getDouble(properties, "dist");
+          dist = properties.getDouble("dist");
           if (dist <= 0)
             throw new IllegalArgumentException("Distance must be a positive value in miles, but was "+dist);
           // just warn; this arg is optional.
@@ -197,10 +199,10 @@ public class LuceneSearch {
                 final @HeaderParam("Transaction") ForceMode force,
                 final String body)
     {
-        final Map<String, Object> properties;
+        final PropertyMap<String, Object> properties;
         try {
             log.fine("Reading properties map from " + body);
-            properties = input.readMap(body);
+            properties = new PropertyMap<String, Object>(input.readMap(body));
         } catch (BadInputException e) {
             log.warning("Broken input! Failed to decode " + body + ": " + e.getMessage());
             return output.badRequest(e);
@@ -216,9 +218,9 @@ public class LuceneSearch {
         double lat = 200, lon = 200;
         try {
           indexName = (String)properties.get("index_name");
-          lat = getDouble(properties, "lat");
-          lon = getDouble(properties, "lon");
-          nodeId = getInt(properties, "node_id");
+          lat = properties.getDouble("lat");
+          lon = properties.getDouble("lon");
+          nodeId = properties.getInt("node_id");
         } catch (ClassCastException cce) {
           return output.badRequest(cce);
         }
@@ -231,25 +233,30 @@ public class LuceneSearch {
         }
         Index<Node> index = this.service.index().forNodes(indexName);
         
-        // retrieve the node we want to index
         Node node = null;
         try {
-          node = this.service.getNodeById(nodeId);
-        } catch (NotFoundException nfe) {
-          return output.badRequest(nfe);
+          node = geoIndex(this.service, index, nodeId, lat, lon);
+        } catch (NotFoundException e) {
+          return output.badRequest(e);
         }
-                
-        // index the business. we can't actually use lucene spatial, 
-        // because neo4j doesn't expose the index at a low enough level.
-        ValueContext latValue = ValueContext.numeric(lat);
-        ValueContext lonValue = ValueContext.numeric(lon);
-        index.add(node, LAT_KEY, latValue);
-        index.add(node, LON_KEY, lonValue);
-        
-        // nothin' broke.
         return output.ok(new NodeRepresentation(node));
     }
     
+    // make this available for ad hoc indexing
+    public static Node geoIndex(GraphDatabaseService db, Index<Node> index, long nodeId, double lat, double lon) throws NotFoundException {
+      // retrieve the node we want to index
+      Node node = db.getNodeById(nodeId);
+
+      // index the business. we can't actually use lucene spatial, 
+      // because neo4j doesn't expose the index at a low enough level.
+      ValueContext latValue = ValueContext.numeric(lat);
+      ValueContext lonValue = ValueContext.numeric(lon);
+      index.add(node, LAT_KEY, latValue);
+      index.add(node, LON_KEY, lonValue);
+
+      // nothin' broke.
+      return node;
+    }
     /**
      * Search the named index, building a query as specified.
      * @param querySpec     a JSON representation of a query, which may be nested.
@@ -258,7 +265,7 @@ public class LuceneSearch {
      */
     private List<ScoredNode> indexQuery(
             final String indexName,
-            final Map<String, Object> querySpec,
+            final PropertyMap<String, Object> querySpec,
             final float minScore,
             final double lat,
             final double lon,
@@ -286,8 +293,8 @@ public class LuceneSearch {
           if (lat != 200 && lon != 200 && dist != -1) {
             // see if this node has a lat/lon associated
             try {
-              double nLat = getDouble(n.getProperty("lat"));
-              double nLon = getDouble(n.getProperty("lon"));
+              double nLat = PropertyMap.getDoubleFromObject(n.getProperty("lat"));
+              double nLon = PropertyMap.getDoubleFromObject(n.getProperty("lon"));
               if (nLat < -90 || nLat > 90) {
                 log.warning("Node has a bogus value of "+nLat+" for latitude");
               } else if (nLon < -180 || nLon > 180) {
@@ -386,7 +393,7 @@ public class LuceneSearch {
     {
       List<Query> subQueries = new ArrayList<Query>();
       for (Map<String, Object> subSpec : subSpecs) {
-        subQueries.add(buildQuery(indexName, subSpec));
+        subQueries.add(buildQuery(indexName, new PropertyMap(subSpec)));
       }
       return new DisjunctionMaxQuery(subQueries, tiebreaker);
     }
@@ -401,7 +408,7 @@ public class LuceneSearch {
         }
         Query subQuery = null;
         try {
-          subQuery = buildQuery(indexName, subSpec);
+          subQuery = buildQuery(indexName, new PropertyMap(subSpec));
         } catch (IllegalArgumentException iae) {
           throw new IllegalArgumentException("Can't construct a boolean clause: bad query spec! " + iae.getMessage());
         }
@@ -415,6 +422,24 @@ public class LuceneSearch {
         bQuery.add(new BooleanClause(subQuery, occurs));
       }
       return bQuery;
+    }
+
+    private Query makeGeoQuery(String indexName, double lat, double lon, double dist) {
+      // first pass: make a bounding box using a boolean composition of two range queries.
+      // we CAN use spatial utils here.
+      double diam = 2*dist;
+      LLRect bb = LLRect.createBox(new FloatLatLng(lat, lon), diam, diam);
+      // if the bounding box crosses a pole or the meridian, things will be weird. ignore that for a minute.
+      double lowerLat = bb.getLowerLeft().getLat();
+      double upperLat = bb.getUpperRight().getLat();
+      Query latQuery = NumericRangeQuery.newDoubleRange(LAT_KEY, lowerLat, upperLat, true, true);
+      double lowerLon = bb.getLowerLeft().getLng();
+      double upperLon = bb.getUpperRight().getLng();
+      Query lonQuery = NumericRangeQuery.newDoubleRange(LON_KEY, lowerLon, upperLon, true, true);
+      BooleanQuery bbQuery = new BooleanQuery();
+      bbQuery.add(new BooleanClause(latQuery, BooleanClause.Occur.MUST));
+      bbQuery.add(new BooleanClause(lonQuery, BooleanClause.Occur.MUST));
+      return bbQuery;
     }
 
     private class ScoredNode {
@@ -435,82 +460,11 @@ public class LuceneSearch {
       }
     }
     
-    private float getFloat(Map<String, Object> props, String key) throws IllegalArgumentException {
-      Object value = props.get(key);
-      if (value == null)
-        throw new IllegalArgumentException("Property map has no value for key "+key);
-      try {
-        return getFloat(value);
-      } catch (IllegalArgumentException e) {
-        throw new IllegalArgumentException("Can't get a float for key "+key+" in property map: "+e.getMessage());
-      }
-    }
-    
-    private float getFloat(Object o) throws IllegalArgumentException {
-      if (o == null) {
-        throw new IllegalArgumentException("Can't coerce null to a float.");
-      }
-      try {
-        return ((Number)o).floatValue();
-      } catch (ClassCastException e) {
-        throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to a float.");
-      }
-    }
-    
-    private double getDouble(Map<String, Object> props, String key) throws IllegalArgumentException {
-      Object value = props.get(key);
-      if (value == null)
-        throw new IllegalArgumentException("Property map has no value for key "+key);
-      try {
-        return getDouble(value);
-      } catch (IllegalArgumentException e) {
-        throw new IllegalArgumentException("Can't get a double for key "+key+" in property map: "+e.getMessage());
-      }
-    }
-    
-    private double getDouble(Object o) throws IllegalArgumentException {
-      if (o == null) {
-        throw new IllegalArgumentException("Can't coerce null to a double.");
-      }
-      try {
-        return ((Number)o).doubleValue();
-      } catch (ClassCastException e) {
-        throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to a double.");
-      }
-    }
-    
-    // get ints from any numeric type also, but warn on loss of precision.
-    private int getInt(Map<String, Object> props, String key) throws IllegalArgumentException {
-      Object value = props.get(key);
-      if (value == null)
-        throw new IllegalArgumentException("Property map has no value for key "+key);
-      try {
-        return getInt(value);
-      } catch (IllegalArgumentException e) {
-        throw new IllegalArgumentException("Can't get an int for key "+key+" in property map: "+e.getMessage());
-      }
-    }
-    
-    private int getInt(Object o) throws IllegalArgumentException {
-      if (o == null) {
-        throw new IllegalArgumentException("Can't coerce null to an int.");
-      }
-      // warn on loss of precision!
-      if (o instanceof Double || o instanceof Float) {
-        log.warning("Coercing "+o.getClass().getName()+" to int! Loss of precision.");
-      }
-      try {
-        return ((Number)o).intValue();
-      } catch (ClassCastException e) {
-        throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to an int.");
-      }
-    }
-    
     /**
      * Recursively build up a query object as described by the given query spec.
      * Use the given analyzer as needed.
      */
-    private Query buildQuery(String indexName, Map<String, Object> querySpec) throws IllegalArgumentException {
+    private Query buildQuery(String indexName, PropertyMap<String, Object> querySpec) throws IllegalArgumentException {
       // a valid query object has a type, and then some data.
       QueryType type = null;
       try {
@@ -531,7 +485,7 @@ public class LuceneSearch {
           }
           float dismaxTieBreaker = DEFAULT_DISMAX_TIEBREAKER;
           try {
-            dismaxTieBreaker = getFloat(querySpec, "tiebreaker");
+            dismaxTieBreaker = querySpec.getFloat("tiebreaker");
           } catch (IllegalArgumentException iae) {
             log.info("Using default dismax tiebreaker: " + iae.getMessage());
           }
@@ -543,6 +497,12 @@ public class LuceneSearch {
             throw new IllegalArgumentException("Boolean query must contain a list of clauses.");
           }
           q = makeBooleanQuery(indexName, clauses);
+          break;
+        case GEO:
+          double lat = querySpec.getDouble("lat"); // these are required. they'll barf on a bad value and that's fine.
+          double lon = querySpec.getDouble("lon");
+          double dist = querySpec.getDouble("dist");
+          q = makeGeoQuery(indexName, lat, lon, dist);
           break;
         case TERM:
           String key = (String)querySpec.get("index_key");
@@ -560,7 +520,7 @@ public class LuceneSearch {
           }
           int slop = 0;
           try {
-            slop = getInt(querySpec, "slop");
+            slop = querySpec.getInt("slop");
           } catch (IllegalArgumentException iae) {
             log.warning("Ignoring phrase slop: " + iae.getMessage());
           }
@@ -585,7 +545,7 @@ public class LuceneSearch {
       // now that we have the query object, set the boost on it.
       float boost = 1.0f; // default to no boost
       try {
-        boost = getFloat(querySpec, "boost");
+        boost = querySpec.getFloat("boost");
       } catch (IllegalArgumentException iae) {
         log.warning("Couldn't set boost on query of type " + type + ": " + iae.getMessage());
       }
