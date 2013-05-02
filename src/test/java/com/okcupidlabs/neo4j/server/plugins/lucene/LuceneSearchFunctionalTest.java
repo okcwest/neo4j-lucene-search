@@ -178,6 +178,22 @@ public class LuceneSearchFunctionalTest {
       }
     }
 
+    @Test
+    public void geoPrimarySearch() {
+      RestRequest restRequest = new RestRequest(server.baseUri().resolve(MOUNT_POINT), CLIENT);
+      JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.GEO_SEARCH_FIXTURE);
+      assertEquals(200, response.getStatus());
+      String body = response.getEntity();
+      log.info("Got geo response with body: " + body);
+      try {
+          List responseList = objectMapper.readValue(body, List.class);
+          assertEquals(3, responseList.size());
+      } catch (Exception e) {
+          log.severe("Couldn't coerce response " + body + " to a list.");
+          assertTrue(false); // cause a test failure
+      }
+    }
+
 
     @After
     public void tearDown() {
