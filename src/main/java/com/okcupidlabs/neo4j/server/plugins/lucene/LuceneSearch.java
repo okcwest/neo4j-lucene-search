@@ -58,6 +58,8 @@ public class LuceneSearch {
     private static final String[] REQUIRED_SEARCH_PARAMETERS = {"query_spec", "index_name"};
     private static final String[] REQUIRED_GEO_INDEX_PARAMETERS = {"index_name", "node_id", "lat", "lon"};
     private static final float DEFAULT_DISMAX_TIEBREAKER = 0.1f;
+    private static final FloatLatLng NORTH_POLE = new FloatLatLng(90d, 0d);
+    private static final FloatLatLng SOUTH_POLE = new FloatLatLng(-90d, 0d);
     private static final Class defaultAnalyzerClass = WhitespaceAnalyzer.class; // don't instantiate
     
     private static final String LAT_KEY = "lat", LON_KEY = "lon"; // where to index the geo data
@@ -428,14 +430,27 @@ public class LuceneSearch {
       // first pass: make a bounding box using a boolean composition of two range queries.
       // we CAN use spatial utils here.
       double diam = 2*dist;
+      // if the bounding box crosses the meridian, things will be weird.
+      // LLRect does the right thing near the poles.
       LLRect bb = LLRect.createBox(new FloatLatLng(lat, lon), diam, diam);
-      // if the bounding box crosses a pole or the meridian, things will be weird. ignore that for a minute.
       double lowerLat = bb.getLowerLeft().getLat();
       double upperLat = bb.getUpperRight().getLat();
       Query latQuery = NumericRangeQuery.newDoubleRange(LAT_KEY, lowerLat, upperLat, true, true);
-      double lowerLon = bb.getLowerLeft().getLng();
-      double upperLon = bb.getUpperRight().getLng();
-      Query lonQuery = NumericRangeQuery.newDoubleRange(LON_KEY, lowerLon, upperLon, true, true);
+      // longitude query is where things get hinky at the opposite meridian.
+      double leftLon = bb.getLowerLeft().getLng();
+      double rightLon = bb.getUpperRight().getLng();
+      Query lonQuery;
+      if (leftLon > lon || rightLon < lon) {
+        // crossed the meridian from the east. compose two queries.
+        Query leftLonQuery = NumericRangeQuery.newDoubleRange(LON_KEY, leftLon, 180d, true, true);
+        Query rightLonQuery = NumericRangeQuery.newDoubleRange(LON_KEY, -180d, rightLon, true, true);
+        BooleanQuery lonCompositeQuery = new BooleanQuery();
+        lonCompositeQuery.add(new BooleanClause(leftLonQuery, BooleanClause.Occur.SHOULD));
+        lonCompositeQuery.add(new BooleanClause(leftLonQuery, BooleanClause.Occur.SHOULD));
+        lonQuery = lonCompositeQuery;
+      } else {
+        lonQuery = NumericRangeQuery.newDoubleRange(LON_KEY, leftLon, rightLon, true, true);
+      }
       BooleanQuery bbQuery = new BooleanQuery();
       bbQuery.add(new BooleanClause(latQuery, BooleanClause.Occur.MUST));
       bbQuery.add(new BooleanClause(lonQuery, BooleanClause.Occur.MUST));
