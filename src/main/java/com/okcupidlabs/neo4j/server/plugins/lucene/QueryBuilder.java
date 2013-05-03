@@ -13,15 +13,19 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.PhraseQuery;
 import org.apache.lucene.search.NumericRangeQuery;
+import org.apache.lucene.search.NumericRangeFilter;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.BooleanFilter;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.DisjunctionMaxQuery;
+import org.apache.lucene.search.FilteredQuery;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.search.similar.SimilarityQueries;
 
+import org.apache.lucene.spatial.tier.LatLongDistanceFilter;
 import org.apache.lucene.spatial.geometry.shape.LLRect;
 import org.apache.lucene.spatial.geometry.FloatLatLng;
 
@@ -188,7 +192,14 @@ public class QueryBuilder {
   }
 
   public static Query makeGeoQuery(double lat, double lon, double dist) {
-    // first pass: make a bounding box using a boolean composition of two range queries.
+    // make a bounding box using a filtered query.
+    // this is weirdly complicated, because distance query can only be implemented as a filter,
+    // but distance math is expensive. so, in order, we 
+    //   -- filter on latitude, which is always a continuous NumericRange. This performs a Query.
+    //   -- filter that filter on longitude, which is sometimes two NumericRanges. Compose filters if needed. These perform Queries too.
+    //   -- perform distance filter on the composition of these filters.
+    //   -- apply all those filters to the results of a NumericRangeQuery for the lat range.
+    //   -- this performs the lat query twice, effectively, but is worthwhile because it saves us lots of distance math.
     // we CAN use spatial utils here.
     double diam = 2*dist;
     // if the bounding box crosses the meridian, things will be weird.
@@ -196,26 +207,30 @@ public class QueryBuilder {
     LLRect bb = LLRect.createBox(new FloatLatLng(lat, lon), diam, diam);
     double lowerLat = bb.getLowerLeft().getLat();
     double upperLat = bb.getUpperRight().getLat();
-    Query latQuery = NumericRangeQuery.newDoubleRange(LAT_KEY, lowerLat, upperLat, true, true);
+    NumericRangeFilter latFilter = NumericRangeFilter.newDoubleRange(LAT_KEY, lowerLat, upperLat, true, true);
     // longitude query is where things get hinky at the opposite meridian.
     double leftLon = bb.getLowerLeft().getLng();
     double rightLon = bb.getUpperRight().getLng();
-    Query lonQuery;
+    BooleanFilter lonFilter = new BooleanFilter();
     if (leftLon > lon || rightLon < lon) {
-      // crossed the meridian from the east. compose two queries.
-      Query leftLonQuery = NumericRangeQuery.newDoubleRange(LON_KEY, leftLon, 180d, true, true);
-      Query rightLonQuery = NumericRangeQuery.newDoubleRange(LON_KEY, -180d, rightLon, true, true);
-      BooleanQuery lonCompositeQuery = new BooleanQuery();
-      lonCompositeQuery.add(new BooleanClause(leftLonQuery, BooleanClause.Occur.SHOULD));
-      lonCompositeQuery.add(new BooleanClause(leftLonQuery, BooleanClause.Occur.SHOULD));
-      lonQuery = lonCompositeQuery;
+      // box crosses the meridian. compose two queries.
+      NumericRangeFilter leftLonFilter = NumericRangeFilter.newDoubleRange(LON_KEY, leftLon, 180d, true, true);
+      NumericRangeFilter rightLonFilter = NumericRangeFilter.newDoubleRange(LON_KEY, -180d, rightLon, true, true);
+      lonFilter.add(leftLonFilter, BooleanClause.Occur.SHOULD); // these get OR'd together.
+      lonFilter.add(rightLonFilter, BooleanClause.Occur.SHOULD);
     } else {
-      lonQuery = NumericRangeQuery.newDoubleRange(LON_KEY, leftLon, rightLon, true, true);
+      lonFilter.add(NumericRangeFilter.newDoubleRange(LON_KEY, leftLon, rightLon, true, true), BooleanClause.Occur.MUST);
     }
-    BooleanQuery bbQuery = new BooleanQuery();
-    bbQuery.add(new BooleanClause(latQuery, BooleanClause.Occur.MUST));
-    bbQuery.add(new BooleanClause(lonQuery, BooleanClause.Occur.MUST));
-    return bbQuery;
+    // compose lat and lon filters
+    BooleanFilter bbFilter = new BooleanFilter();
+    bbFilter.add(latFilter, BooleanClause.Occur.MUST); // AND these together to get a bounding box.
+    bbFilter.add(lonFilter, BooleanClause.Occur.MUST);
+    // FINALLY, apply a radial distance filter on the result.
+    LatLongDistanceFilter radialFilter = new LatLongDistanceFilter(bbFilter, lat, lon, dist, LAT_KEY, LON_KEY);
+    // now turn this all back into a query. seed it with a lat query.
+    NumericRangeQuery latQuery = NumericRangeQuery.newDoubleRange(LAT_KEY, lowerLat, upperLat, true, true);
+    FilteredQuery radialQuery = new FilteredQuery(latQuery, radialFilter);
+    return radialQuery;
   }
   
   // make a Term list for a Phrase query.
