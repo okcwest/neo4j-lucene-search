@@ -235,8 +235,15 @@ public class LuceneSearch {
       // because neo4j doesn't expose the index at a low enough level.
       ValueContext latValue = ValueContext.numeric(lat);
       ValueContext lonValue = ValueContext.numeric(lon);
-      index.add(node, QueryBuilder.LAT_KEY, latValue);
-      index.add(node, QueryBuilder.LON_KEY, lonValue);
+      // fooling with the nodespace needs to be atomic
+      Transaction tx = db.beginTx();
+      try {
+        index.add(node, QueryBuilder.LAT_KEY, latValue);
+        index.add(node, QueryBuilder.LON_KEY, lonValue);
+        tx.success();
+      } finally {
+        tx.finish();
+      }
 
       // nothin' broke.
       return node;
