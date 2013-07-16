@@ -27,23 +27,4 @@ public class NoArgumentStandardAnalyzer extends Analyzer {
     return standardAnalyzer.tokenStream(fieldName, reader);
   }
   
-  public static void main(String[] argv) {
-    // instantiate an analyzer and feed it some text
-    final String defaultText = "So I went to yoga last night for the first time in toooo long. The class was held at Grace Cathedral and it was amazing! I recommend it for those that live near SF: http://labyrinthyoga.com/ I'm even going to do my taxes today, that's how stress-free I woke up this morning ;)";
-    final String text = (argv.length > 0 ? argv[0] : defaultText);
-    // a reader on the text:
-    StringReader reader = new StringReader(text);
-    NoArgumentStandardAnalyzer analyzer = new NoArgumentStandardAnalyzer();
-    TokenStream ts = analyzer.tokenStream("", reader);
-    // capture the term attribute
-    CharTermAttribute termAtt = ts.addAttribute(CharTermAttribute.class);
-    PositionIncrementAttribute posAtt = ts.addAttribute(PositionIncrementAttribute.class);
-    OffsetAttribute offAtt = ts.addAttribute(OffsetAttribute.class);
-    try {
-      while (ts.incrementToken()) {
-        System.out.println("Got token '"+ termAtt.toString() + "' with pos inc " + posAtt.getPositionIncrement()
-                            + " and offset [" + offAtt.startOffset() + ", " + offAtt.endOffset() + "]");
-      }
-    } catch (IOException e) {} // using a string reader. shouldn't happen.
-  }
 }
