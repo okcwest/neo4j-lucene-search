@@ -104,6 +104,13 @@ public class LuceneSearchTest {
         Object body = response.getEntity();
         assertEquals(200, response.getStatus());
     }
+    
+    @Test
+    public void numeric() {
+      final Response response = service.search(FORCE, LuceneSearchTestFixtures.NUM_RANGE_SEARCH_FIXTURE);
+      Object body = response.getEntity();
+      assertEquals(200, response.getStatus());
+    }
 
     @After
     public void tearDown() throws Exception {

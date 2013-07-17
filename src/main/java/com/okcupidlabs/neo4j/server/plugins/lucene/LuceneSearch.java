@@ -44,6 +44,7 @@ public class LuceneSearch {
 
     private static final String[] REQUIRED_SEARCH_PARAMETERS = {"query_spec", "index_name"};
     private static final String[] REQUIRED_GEO_INDEX_PARAMETERS = {"index_name", "node_id", "lat", "lon"};
+    private static final String[] REQUIRED_NUM_INDEX_PARAMETERS = {"index_name", "node_id", "index_key", "index_value"};
     private static final Class defaultAnalyzerClass = WhitespaceAnalyzer.class; // don't instantiate
     
     private final Logger log = Logger.getLogger(LuceneSearch.class.getName());
@@ -178,6 +179,76 @@ public class LuceneSearch {
     }
 
     @POST
+    @Path("/index/numeric")
+    public Response numericIndex(
+                final @HeaderParam("Transaction") ForceMode force,
+                final String body)
+    {
+        final PropertyMap<String, Object> properties;
+        try {
+            log.fine("Reading properties map from " + body);
+            properties = new PropertyMap<String, Object>(input.readMap(body));
+        } catch (BadInputException e) {
+            log.warning("Broken input! Failed to decode " + body + ": " + e.getMessage());
+            return output.badRequest(e);
+        }
+
+        if(!ensureRequiredParameters(properties, REQUIRED_NUM_INDEX_PARAMETERS)) {
+            return missingParameters(properties, REQUIRED_NUM_INDEX_PARAMETERS);
+        }
+        
+        // need an index_name, node, and coordinates.
+        String indexName = null;
+        long nodeId = 0;
+        String indexKey = null;
+        double indexValue = 0;
+        try {
+          indexName = (String)properties.get("index_name");
+          indexKey = (String)properties.get("index_key");
+          indexValue = properties.getDouble("index_value");
+          nodeId = properties.getInt("node_id");
+        } catch (ClassCastException cce) {
+          return output.badRequest(cce);
+        }
+        
+        // get the named index
+        // INDEX MUST EXIST.
+        if (!this.service.index().existsForNodes(indexName)) {
+            return output.badRequest(
+                    new IllegalArgumentException("Index with index_name: " + indexName + " does not exist."));
+        }
+        Index<Node> index = this.service.index().forNodes(indexName);
+        
+        Node node = null;
+        try {
+          node = numericIndex(this.service, index, nodeId, indexKey, indexValue);
+        } catch (NotFoundException e) {
+          return output.badRequest(e);
+        }
+        return output.ok(new NodeRepresentation(node));
+    }
+    
+    /** Index a numeric value so that it can be searched by range.
+    @param db  A connection to the db where we'll index this
+    @param index The index to use
+    @param nodeId  The id of the node we want to index
+    @param key The index field where we'll index the node
+    @param value the value to index
+    @return The indexed node */
+    public static Node numericIndex(GraphDatabaseService db, Index<Node> index, long nodeId, String key, double value) {
+      Node node = db.getNodeById(nodeId);
+      ValueContext vc = ValueContext.numeric(value);
+      Transaction tx = db.beginTx();
+      try {
+        index.add(node, key, vc);
+        tx.success();
+      } finally {
+        tx.finish();
+      }
+      return node;
+    }
+    
+    @POST
     @Path("/index/geo")
     public Response geoIndex(
                 final @HeaderParam("Transaction") ForceMode force,
@@ -210,7 +281,7 @@ public class LuceneSearch {
         }
         
         // get the named index
-        // can't search an absent index
+        // INDEX MUST EXIST.
         if (!this.service.index().existsForNodes(indexName)) {
             return output.badRequest(
                     new IllegalArgumentException("Index with index_name: " + indexName + " does not exist."));

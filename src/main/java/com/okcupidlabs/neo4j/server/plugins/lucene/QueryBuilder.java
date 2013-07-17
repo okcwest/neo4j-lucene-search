@@ -29,6 +29,8 @@ import org.apache.lucene.spatial.tier.LatLongDistanceFilter;
 import org.apache.lucene.spatial.geometry.shape.LLRect;
 import org.apache.lucene.spatial.geometry.FloatLatLng;
 
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 import java.util.logging.*;
 
 public class QueryBuilder {
@@ -37,6 +39,7 @@ public class QueryBuilder {
   private static final float DEFAULT_DISMAX_TIEBREAKER = 0.1f;
   public static final String LAT_KEY = "lat", LON_KEY = "lon"; // where to index the geo data
   private static final Logger log = Logger.getLogger(QueryBuilder.class.getName());
+  private static Pattern numRangePattern = Pattern.compile("^([\\(\\[])(.*),(.*)([\\)\\]])$");
   
   /**
    * Recursively build up a query object as described by the given query spec.
@@ -76,6 +79,11 @@ public class QueryBuilder {
         }
         q = makeBooleanQuery(analyzer, clauses);
         break;
+      case NUMRANGE:
+        String key = (String)querySpec.get("index_key");
+        String range = (String)querySpec.get("range");
+        q = makeNumRangeQuery(key, range);
+        break;
       case GEO:
         double lat = querySpec.getDouble("lat"); // these are required. they'll barf on a bad value and that's fine.
         double lon = querySpec.getDouble("lon");
@@ -83,12 +91,12 @@ public class QueryBuilder {
         q = makeGeoQuery(lat, lon, dist);
         break;
       case TERM:
-        String key = (String)querySpec.get("index_key");
+        String numericKey = (String)querySpec.get("index_key");
         String queryString = (String)querySpec.get("query");
-        if (key == null || queryString == null) {
+        if (numericKey == null || queryString == null) {
           throw new IllegalArgumentException("Trying to build a term query, but missing index key or query.");
         }
-        q = new TermQuery(new Term(key, queryString));
+        q = new TermQuery(new Term(numericKey, queryString));
         break;
       case PHRASE:
         String phraseKey = (String)querySpec.get("index_key");
@@ -164,7 +172,7 @@ public class QueryBuilder {
     }
     return new DisjunctionMaxQuery(subQueries, tiebreaker);
   }
-
+  
   public static Query makeBooleanQuery(Analyzer analyzer, List<Map<String, Object>> clauses) throws IllegalArgumentException {
     BooleanQuery bQuery = new BooleanQuery();
     for (Map<String, Object> clause : clauses) {
@@ -191,6 +199,29 @@ public class QueryBuilder {
     return bQuery;
   }
 
+  public static Query makeNumRangeQuery(String numericKey, String range) 
+      throws IllegalArgumentException 
+  {
+    // unpack the range string to a value
+    Matcher rangeMatcher = numRangePattern.matcher(range);
+    double minVal = 0, maxVal = 0;
+    boolean minInc = false, maxInc = false;
+    if (rangeMatcher.matches()) {
+      try {
+        minVal = Double.parseDouble(rangeMatcher.group(2));
+        maxVal = Double.parseDouble(rangeMatcher.group(3));
+      } catch (NumberFormatException nfe) {
+        throw new IllegalArgumentException(nfe);
+      }
+      // numbers ok. get inclusivity
+      minInc = (rangeMatcher.group(1).equals("["));
+      maxInc = (rangeMatcher.group(4).equals("]"));
+    } else {
+      throw new IllegalArgumentException("Couldn't convert "+range+" to a range like [nnn,mmm)");
+    }
+    return NumericRangeQuery.newDoubleRange(numericKey, minVal, maxVal, minInc, maxInc);
+  }
+  
   public static Query makeGeoQuery(double lat, double lon, double dist) {
     // make a bounding box using a filtered query.
     // this is weirdly complicated, because distance query can only be implemented as a filter,

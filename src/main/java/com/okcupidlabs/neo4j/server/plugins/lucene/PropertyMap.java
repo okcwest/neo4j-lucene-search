@@ -41,7 +41,6 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
     }
   }
   
-  // get ints from any numeric type also, but warn on loss of precision.
   public static <T> int getInt(Map<T, Object> props, T key) throws IllegalArgumentException {
     Object value = props.get(key);
     if (value == null)
@@ -68,17 +67,6 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
     return getIntFromObject(o);
   }
   
-  public static float getFloatFromObject(Object o) throws IllegalArgumentException {
-    if (o == null) {
-      throw new IllegalArgumentException("Can't coerce null to a float.");
-    }
-    try {
-      return ((Number)o).floatValue();
-    } catch (ClassCastException e) {
-      throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to a float.");
-    }
-  }
-  
   public static double getDoubleFromObject(Object o) throws IllegalArgumentException {
     if (o == null) {
       throw new IllegalArgumentException("Can't coerce null to a double.");
@@ -87,6 +75,21 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
       return ((Number)o).doubleValue();
     } catch (ClassCastException e) {
       throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to a double.");
+    }
+  }
+  
+  public static float getFloatFromObject(Object o) throws IllegalArgumentException {
+    if (o == null) {
+      throw new IllegalArgumentException("Can't coerce null to a float.");
+    }
+    // warn on loss of precision!
+    if (o instanceof Double) {
+      log.warning("Coercing "+o.getClass().getName()+" to float! Loss of precision.");
+    }
+    try {
+      return ((Number)o).floatValue();
+    } catch (ClassCastException e) {
+      throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to a float.");
     }
   }
   
