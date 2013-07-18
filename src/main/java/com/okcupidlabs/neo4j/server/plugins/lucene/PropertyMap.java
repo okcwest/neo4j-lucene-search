@@ -21,7 +21,7 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   
   /**
   * Instantiate a property map with values taken from map
-  * @param A map whose contents this PropertyMap will contain
+  * @param  map A map whose contents this PropertyMap will contain
   */
   public PropertyMap(Map map) {
     super();
@@ -29,11 +29,11 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   }
 
   /** 
-  * Get a value of type double.
+  * Try to get a value of type {@code double} from {@code key} in {@code props}
   * @param props The property map
   * @param key  The key to retrieve
   * @return A double value found at {@code key} in {@code props}
-  * @throws {@code IllegalArgumentException} if the key does not exist in props or its value cannot be coerced to a double 
+  * @throws IllegalArgumentException if the key does not exist in props or its value cannot be coerced to a double 
   */
   public static <T> double getDouble(Map<T, Object> props, T key) throws IllegalArgumentException {
     Object value = props.get(key);
@@ -47,11 +47,11 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   }
   
   /** 
-  * Get a value of type float.
+  * Try to get a value of type {@code float} from {@code key} in {@code props}
   * @param props The property map
   * @param key  The key to retrieve
   * @return A float value found at {@code key} in {@code props}
-  * @throws {@code IllegalArgumentException} if the key does not exist in props or its value cannot be coerced to a float 
+  * @throws IllegalArgumentException if the key does not exist in props or its value cannot be coerced to a float 
   */
   public static <T> float getFloat(Map<T, Object> props, T key) throws IllegalArgumentException {
     Object value = props.get(key);
@@ -65,11 +65,11 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   }
   
   /** 
-  * Get a value of type int.
+  * Try to get a value of type {@code int} from {@code key} in {@code props}
   * @param props The property map
   * @param key  The key to retrieve
   * @return An int value found at {@code key} in {@code props}
-  * @throws {@code IllegalArgumentException} if the key does not exist in props or its value cannot be coerced to an int 
+  * @throws IllegalArgumentException if the key does not exist in props or its value cannot be coerced to an int 
   */
   public static <T> int getInt(Map<T, Object> props, T key) throws IllegalArgumentException {
     Object value = props.get(key);
@@ -83,10 +83,10 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   }
   
   /** 
-  * Get a value of type double.
+  * Try to get a value of type {@code double} from {@code key} in this map
   * @param key  The key to retrieve
   * @return A double value found at {@code key}
-  * @throws {@code IllegalArgumentException} if the key does not exist in props or its value cannot be coerced to a double 
+  * @throws IllegalArgumentException if the key does not exist in props or its value cannot be coerced to a double 
   */
   public double getDouble(K key) throws IllegalArgumentException {
     Object o = this.get(key);
@@ -96,10 +96,10 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   }
   
   /** 
-  * Get a value of type float.
+  * Try to get a value of type {@code float} from {@code key} in this map
   * @param key  The key to retrieve
   * @return A float value found at {@code key}
-  * @throws {@code IllegalArgumentException} if the key does not exist in props or its value cannot be coerced to a float 
+  * @throws IllegalArgumentException if the key does not exist in props or its value cannot be coerced to a float 
   */
   public float getFloat(K key) throws IllegalArgumentException {
     Object o = this.get(key);
@@ -109,10 +109,10 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   }
   
   /** 
-  * Get a value of type int.
+  * Try to get a value of type {@code int} from {@code key} in this map
   * @param key  The key to retrieve
   * @return An int value found at {@code key}
-  * @throws {@code IllegalArgumentException} if the key does not exist in props or its value cannot be coerced to an int 
+  * @throws IllegalArgumentException if the key does not exist in props or its value cannot be coerced to an int 
   */
   public int getInt(K key) throws IllegalArgumentException {
     Object o = this.get(key);
@@ -125,7 +125,7 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   * Try to coerce an object to a value of type double
   * @param o  The object
   * @return The double value of {@code o}
-  * @throws {@code IllegalArgumentException} if o cannot be coerced to a double. 
+  * @throws IllegalArgumentException if o cannot be coerced to a double. 
   */
   public static double getDoubleFromObject(Object o) throws IllegalArgumentException {
     if (o == null) {
@@ -142,7 +142,7 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   * Try to coerce an object to a value of type float
   * @param o  The object
   * @return The float value of {@code o}
-  * @throws {@code IllegalArgumentException} if o cannot be coerced to a float. 
+  * @throws IllegalArgumentException if o cannot be coerced to a float. 
   */
   public static float getFloatFromObject(Object o) throws IllegalArgumentException {
     if (o == null) {
@@ -163,7 +163,7 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   * Try to coerce an object to a value of type float
   * @param o  The object
   * @return The float value of {@code o}
-  * @throws {@code IllegalArgumentException} if o cannot be coerced to a float. 
+  * @throws IllegalArgumentException if o cannot be coerced to a float.
   */
   public static int getIntFromObject(Object o) throws IllegalArgumentException {
     if (o == null) {
@@ -179,6 +179,5 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
       throw new IllegalArgumentException("Can't coerce object of type "+o.getClass().getName()+" to an int.");
     }
   }
-  
-  
+    
 }

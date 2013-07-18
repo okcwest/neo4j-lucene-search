@@ -163,12 +163,18 @@ public class LuceneSearch {
 
         // can't search an absent index
         if (!this.service.index().existsForNodes(indexName)) {
-            return output.badRequest(
-                    new IllegalArgumentException("Index with index_name: " + indexName + " does not exist."));
+          return output.badRequest(
+            new IllegalArgumentException("Index with index_name: " + indexName + " does not exist."));
         }
 
-        List<ScoredNode> searchResult = indexQuery(indexName, querySpec, minScore, lat, lon, dist);
+        List<ScoredNode> searchResult = null;
+        try {
+          searchResult = indexQuery(indexName, querySpec, minScore, lat, lon, dist);
+        } catch (IllegalArgumentException iae) {
+          return output.badRequest(iae);
+        }
         
+        // if we got here then search result is populated.
         // build up a representation to be returned (there's got to be a better way!)
         List<ScoredNodeRepresentation> reprList = new ArrayList<ScoredNodeRepresentation>();
         for (ScoredNode sn : searchResult) {
@@ -372,6 +378,7 @@ public class LuceneSearch {
             final double lat,
             final double lon,
             final double dist)
+      throws IllegalArgumentException
     {
         // make sure the index contains the desired key
         // this call will create an index, if none was there, so the caller 

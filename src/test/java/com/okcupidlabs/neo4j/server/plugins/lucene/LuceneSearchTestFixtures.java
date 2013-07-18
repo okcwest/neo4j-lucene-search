@@ -92,8 +92,7 @@ public class LuceneSearchTestFixtures {
                     "\"type\":\"TERM\"," +
                     "\"index_key\": \"text\"," +
                     "\"query\": \"President Obama\"" + // match case coz we are testing with whitespace analyzer
-                    "}" +
-                  "}" +
+                    "}," +
                   "\"occurs\": \"CAN\"" +
                   "}" +
                 "]" +

@@ -33,6 +33,71 @@ import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.logging.*;
 
+/** Builds complex lucene queries based on a PropertyMap specifying a complex query structure.
+    <p>Query spec should look like one of
+     <code><blockquote>
+    {"type": "DISMAX"<br>
+    &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+    &nbsp;&nbsp;"subqueries": [$QUERY0 $QUERY1 ... $QUERYN]&nbsp;&nbsp;&nbsp;&nbsp;// where $QUERYX is another valid query spec.<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;"tiebreaker": $tiebreakingvalue&nbsp;&nbsp;&nbsp;&nbsp;// this field is optional<br>
+    &nbsp;&nbsp;}<br>
+    </blockquote></code>
+    
+     <code><blockquote>
+    {"type": "BOOL"<br>
+    &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+    &nbsp;&nbsp;"clauses": [<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;{"query_spec": $QUERY0&nbsp;&nbsp;&nbsp;&nbsp;// where $QUERYX is another valid query spec.<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"occurs": "(MUST|SHOULD|MUST_NOT)"}<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;...<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;{"query_spec": $QUERYN&nbsp;&nbsp;&nbsp;&nbsp;// where $QUERYX is another valid query spec.<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"occurs": "(MUST|SHOULD|MUST_NOT)"}<br>
+    &nbsp;&nbsp;}<br>
+      </blockquote></code>
+   
+   <code><blockquote>
+   {"type": "TERM"<br>
+   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+   &nbsp;&nbsp;"index_key": $FIELD_TO_SEARCH<br>
+   &nbsp;&nbsp;"query": $TERM_TO_FIND<br>
+   &nbsp;&nbsp;}<br>
+  </blockquote></code>
+   
+    <code><blockquote>
+    {"type": "SIM"<br>
+    &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+    &nbsp;&nbsp;"index_key": $FIELD_TO_SEARCH<br>
+    &nbsp;&nbsp;"query": $TERM_TO_FIND<br>
+    &nbsp;&nbsp;}<br>
+   </blockquote></code>
+
+   <code><blockquote>
+   {"type": "PHRASE"<br>
+   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+   &nbsp;&nbsp;"index_key": $FIELD_TO_SEARCH<br>
+   &nbsp;&nbsp;"query": $TERM_TO_FIND<br>
+   &nbsp;&nbsp;"slop": $SLOP&nbsp;&nbsp;&nbsp;&nbsp;// optional<br>
+   &nbsp;&nbsp;}<br>
+  </blockquote></code>
+
+   <code><blockquote>
+   {"type": "NUMRANGE"<br>
+   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+   &nbsp;&nbsp;"index_key": $LATITUDE_IN_DEGREES</br>
+   &nbsp;&nbsp;"range": "($FROM,$TO]"&nbsp;&nbsp;&nbsp;&nbsp;//range can be bounded by () or [] to denote inclusivity<br>
+   &nbsp;&nbsp;}<br>
+  </blockquote></code>
+
+   <code><blockquote>
+   {"type": "GEO"<br>
+   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+   &nbsp;&nbsp;"lat": $LATITUDE_IN_DEGREES</br>
+   &nbsp;&nbsp;"lon": $LONGITUDE_IN_DEGREES<br>
+   &nbsp;&nbsp;"dist": $RADIUS_IN_MILES</br>
+   &nbsp;&nbsp;}<br>
+  </blockquote></code>
+
+  */
 public class QueryBuilder {
   public QueryBuilder() {}; // blank constructor
 
@@ -42,8 +107,10 @@ public class QueryBuilder {
   private static Pattern numRangePattern = Pattern.compile("^([\\(\\[])(.*),(.*)([\\)\\]])$");
   
   /**
-   * Recursively build up a query object as described by the given query spec.
-   * Use the given analyzer as needed.
+    * Recursively build up a complex Query object.
+    * @param analyzer The query analyzer to use when building queries (you should discover this from the Index)
+    * @param querySpec A PropertyMap specifying what kind of query to build.
+    * @return a Query object that can be used to execute the requested index query.
    */
   public static Query buildQuery(Analyzer analyzer, PropertyMap<String, Object> querySpec) throws IllegalArgumentException {
     // a valid query object has a type, and then some data.
@@ -54,8 +121,6 @@ public class QueryBuilder {
       throw new IllegalArgumentException("Query spec "+querySpec+" has no type");
     }
     // what kind of query is this?
-    // can support term, geo, sim, or a nested dismax.
-    // only sim and dismax for now.
     Query q = null;
     switch (type) {
       case DISMAX:
@@ -107,10 +172,12 @@ public class QueryBuilder {
           throw new IllegalArgumentException("Trying to build a phrase query, but missing index key or query.");
         }
         int slop = 0;
-        try {
-          slop = querySpec.getInt("slop");
-        } catch (IllegalArgumentException iae) {
-          log.warning("Ignoring phrase slop: " + iae.getMessage());
+        if (querySpec.containsKey("slop")) {
+          try {
+            slop = querySpec.getInt("slop");
+          } catch (IllegalArgumentException iae) {
+            log.warning("Ignoring phrase slop: " + iae.getMessage());
+          }
         }
         try {
           q = makePhraseQuery(analyzer, phraseKey, phraseString, slop);
@@ -143,7 +210,13 @@ public class QueryBuilder {
     return q;
   }
 
-  // some static methods for assembling queries.
+  /**
+    * Make a SimilarityQuery with the supplied specs
+    * @param analyzer The query analyzer to use (this should match the analyzer that was used to build this field)
+    * @param key  The index field to search in
+    * @param query  The search term that results should be similar to.
+    * @return a Query object that can be used to execute the requested similarity query.
+   */
   public static Query makeSimilarityQuery(Analyzer analyzer, String key, String query) {
     // set up a similarity query with the inbound object and analyzer, and no stop words
     Query similarityQuery;
@@ -157,6 +230,14 @@ public class QueryBuilder {
     return similarityQuery;
   }
   
+  /**
+    * Make a PhraseQuery with the supplied specs
+    * @param analyzer The query analyzer to use (this should match the analyzer that was used to build this field)
+    * @param key  The index field to search in
+    * @param query  The search term that results should be similar to.
+    * @param slop  How lenient should we be when constructing the query?
+    * @return a Query object that can be used to execute the requested query.
+   */
   public static Query makePhraseQuery(Analyzer analyzer, String key, String query, int slop) throws IOException {
     List<Term> terms = extractTerms(analyzer, key, query);
     PhraseQuery q = new PhraseQuery();
@@ -167,6 +248,13 @@ public class QueryBuilder {
     return q;
   }
   
+  /**
+    * Make a DisjunctionMaxQuery with the supplied specs
+    * @param analyzer The query analyzer to use (this should match the analyzer that was used to build this field)
+    * @param subspecs  A list of querySpec maps to pass to buildQuery for forming the subqueries
+    * @param tiebreaker  The tiebreaker to use when processing similarly scored subqueries
+    * @return a Query object that can be used to execute the requested query.
+   */
   public static Query makeDismaxQuery(Analyzer analyzer, List<Map<String, Object>> subSpecs, float tiebreaker) 
       throws IllegalArgumentException 
   {
@@ -177,6 +265,14 @@ public class QueryBuilder {
     return new DisjunctionMaxQuery(subQueries, tiebreaker);
   }
   
+  /**
+    * Make a BooleanQuery with the supplied specs
+    * @param analyzer The query analyzer to use (this should match the analyzer that was used to build this field)
+    * @param clauses  A list of maps, each containing a querySpec describing a subquery and a value "occurs",
+                      indicating how to interpret this subquery.
+    * @param tiebreaker  The tiebreaker to use when processing similarly scored subqueries
+    * @return a Query object that can be used to execute the requested query.
+   */
   public static Query makeBooleanQuery(Analyzer analyzer, List<Map<String, Object>> clauses) throws IllegalArgumentException {
     BooleanQuery bQuery = new BooleanQuery();
     for (Map<String, Object> clause : clauses) {
@@ -193,16 +289,26 @@ public class QueryBuilder {
       }
       // also an OCCURS value.
       BooleanClause.Occur occurs = null;
+      if (!clause.containsKey("occurs") || clause.get("occurs") == null) {
+        // this is REQUIRED. throw.
+        throw new IllegalArgumentException("Clause "+clause+" has missing occurs value. Must be MUST|MUST_NOT|SHOULD.");
+      }
       try {
-          occurs = Enum.valueOf(BooleanClause.Occur.class, (String)clause.get("occurs"));
-        } catch (NullPointerException npe) {
-          throw new IllegalArgumentException("Clause "+clause+" has missing or bad occurs value. Must be MUST|MUST_NOT|SHOULD.");
+        occurs = Enum.valueOf(BooleanClause.Occur.class, (String)clause.get("occurs"));
+      } catch (IllegalArgumentException iae) {
+        throw new IllegalArgumentException("Clause "+clause+" has bad occurs value. Must be MUST|MUST_NOT|SHOULD.");
       }
       bQuery.add(new BooleanClause(subQuery, occurs));
     }
     return bQuery;
   }
 
+  /**
+    * Make a NumericRangeQuery with the supplied specs
+    * @param numericKey The field to search, which must be a NumericField.
+    * @param range  A string specifying the range to search.
+    * @return a Query object that can be used to execute the requested query.
+   */
   public static Query makeNumRangeQuery(String numericKey, String range) 
       throws IllegalArgumentException 
   {
@@ -226,6 +332,13 @@ public class QueryBuilder {
     return NumericRangeQuery.newDoubleRange(numericKey, minVal, maxVal, minInc, maxInc);
   }
   
+  /**
+    * Make a geographic query with the supplied specs
+    * @param lat The latitude of the point around which to search
+    * @param lon The longitude of the point around which to search
+    * @param dist  A distance in miles specifying the range to search.
+    * @return a Query object that can be used to execute the requested query.
+   */
   public static Query makeGeoQuery(double lat, double lon, double dist) {
     // make a bounding box using a filtered query.
     // this is weirdly complicated, because distance query can only be implemented as a filter,
