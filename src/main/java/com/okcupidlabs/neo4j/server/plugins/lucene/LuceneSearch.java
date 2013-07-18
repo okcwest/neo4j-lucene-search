@@ -118,43 +118,47 @@ public class LuceneSearch {
         // index query will need a float
         float minScore = 0;
         // depending on how this is called, though, we may have a double or int in the properties
-        try {
-          minScore = properties.getFloat("min_score");
-        } catch (IllegalArgumentException iae) {
-          log.warning("Ignoring illegal value for min_score: "+iae.getMessage());
+        if (properties.containsKey("min_score")) {
+          try {
+            minScore = properties.getFloat("min_score");
+          } catch (IllegalArgumentException iae) {
+            log.warning("Ignoring illegal value for min_score: "+iae.getMessage());
+          }
         }
         
         //optionally use geo constraints.
         double lat = 200, lon = 200, dist = -1; // init to nonsense values
 
-        try {
-          lat = properties.getDouble("lat");
-          if (lat > 90 || lat < -90)
-            throw new IllegalArgumentException("Latitude must be in the range 0 +- 90, but was "+lat);
-          // just warn; this arg is optional.
-        } catch (IllegalArgumentException iae) {
-          log.warning("Ignoring illegal value for latitude: "+iae.getMessage());
-          lat = 200;
-        }
-        
-        try {
-          lon = properties.getDouble("lon");
-          if (lon > 180 || lon < -180)
-            throw new IllegalArgumentException("Longitude must be in the range 0 +- 180, but was "+lon);
-          // just warn; this arg is optional.
-        } catch (IllegalArgumentException iae) {
-          log.warning("Ignoring illegal value for longitude: "+iae.getMessage());
-          lon = 200;
-        }
-        
-        try {
-          dist = properties.getDouble("dist");
-          if (dist <= 0)
-            throw new IllegalArgumentException("Distance must be a positive value in miles, but was "+dist);
-          // just warn; this arg is optional.
-        } catch (IllegalArgumentException iae) {
-          log.warning("Ignoring illegal value for distance: "+iae.getMessage());
-          dist = -1;
+        if (properties.containsKey("lat") && properties.containsKey("lon") && properties.containsKey("dist")) {
+          try {
+            lat = properties.getDouble("lat");
+            if (lat > 90 || lat < -90)
+              throw new IllegalArgumentException("Latitude must be in the range 0 +- 90, but was "+lat);
+            // just warn; this arg is optional.
+          } catch (IllegalArgumentException iae) {
+            log.warning("Ignoring illegal value for latitude: "+iae.getMessage());
+            lat = 200;
+          }
+
+          try {
+            lon = properties.getDouble("lon");
+            if (lon > 180 || lon < -180)
+              throw new IllegalArgumentException("Longitude must be in the range 0 +- 180, but was "+lon);
+            // just warn; this arg is optional.
+          } catch (IllegalArgumentException iae) {
+            log.warning("Ignoring illegal value for longitude: "+iae.getMessage());
+            lon = 200;
+          }
+
+          try {
+            dist = properties.getDouble("dist");
+            if (dist <= 0)
+              throw new IllegalArgumentException("Distance must be a positive value in miles, but was "+dist);
+            // just warn; this arg is optional.
+          } catch (IllegalArgumentException iae) {
+            log.warning("Ignoring illegal value for distance: "+iae.getMessage());
+            dist = -1;
+          }
         }
 
         // can't search an absent index
@@ -178,6 +182,19 @@ public class LuceneSearch {
         return output.ok(reprListRepr);
     }
 
+    /**
+     * Index the node with the provided id, using a numeric value which will always be converted to a double.
+     *
+     * @param force Force mode for transaction, normally used internally.
+     * @param body JSON encoded parameters.
+     *             Required:
+     *             - node_id: The node to index
+     *             - index_name: Name of index to put it in
+     *             - index_key: Index key to use
+     *             - index_value: The numeric value we want to index. Any provided value will be cast to a double.
+     *
+     * @return JSON representation of indexed node. (See: http://docs.neo4j.org/chunked/milestone/rest-api-node-properties.html)
+     */
     @POST
     @Path("/index/numeric")
     public Response numericIndex(
@@ -228,26 +245,19 @@ public class LuceneSearch {
         return output.ok(new NodeRepresentation(node));
     }
     
-    /** Index a numeric value so that it can be searched by range.
-    @param db  A connection to the db where we'll index this
-    @param index The index to use
-    @param nodeId  The id of the node we want to index
-    @param key The index field where we'll index the node
-    @param value the value to index
-    @return The indexed node */
-    public static Node numericIndex(GraphDatabaseService db, Index<Node> index, long nodeId, String key, double value) {
-      Node node = db.getNodeById(nodeId);
-      ValueContext vc = ValueContext.numeric(value);
-      Transaction tx = db.beginTx();
-      try {
-        index.add(node, key, vc);
-        tx.success();
-      } finally {
-        tx.finish();
-      }
-      return node;
-    }
-    
+    /**
+     * Index the node with the provided id, using the provided latitude and longitude.
+     *
+     * @param force Force mode for transaction, normally used internally.
+     * @param body JSON encoded parameters.
+     *             Required:
+     *             - node_id: The node to index
+     *             - index_name: Name of index to put it in
+     *             - lat: The latitude for this node
+     *             - lon: The longitude for this node
+     *
+     * @return JSON representation of indexed node. (See: http://docs.neo4j.org/chunked/milestone/rest-api-node-properties.html)
+     */
     @POST
     @Path("/index/geo")
     public Response geoIndex(
@@ -297,7 +307,35 @@ public class LuceneSearch {
         return output.ok(new NodeRepresentation(node));
     }
     
-    // make this available for ad hoc indexing
+    /** 
+    * Index a numeric value so that it can be searched by range.
+    * @param db  A connection to the db where we'll index this
+    * @param index The index to use
+    * @param nodeId  The id of the node we want to index
+    * @param key The index field where we'll index the node
+    * @param value the value to index
+    * @return The indexed node */
+    public static Node numericIndex(GraphDatabaseService db, Index<Node> index, long nodeId, String key, double value) {
+      Node node = db.getNodeById(nodeId);
+      ValueContext vc = ValueContext.numeric(value);
+      Transaction tx = db.beginTx();
+      try {
+        index.add(node, key, vc);
+        tx.success();
+      } finally {
+        tx.finish();
+      }
+      return node;
+    }
+    
+    /** 
+    * Index a node by latitude/longitude.
+    * @param db  A connection to the db where we'll index this
+    * @param index The index to use
+    * @param nodeId  The id of the node we want to index
+    * @param lat  The node's latitude
+    * @param lon  The node's longitude
+    * @return The indexed node */
     public static Node geoIndex(GraphDatabaseService db, Index<Node> index, long nodeId, double lat, double lon) throws NotFoundException {
       // retrieve the node we want to index
       Node node = db.getNodeById(nodeId);
@@ -319,6 +357,8 @@ public class LuceneSearch {
       // nothin' broke.
       return node;
     }
+
+
     /**
      * Search the named index, building a query as specified.
      * @param querySpec     a JSON representation of a query, which may be nested.

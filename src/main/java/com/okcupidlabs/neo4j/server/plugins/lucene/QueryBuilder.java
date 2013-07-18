@@ -65,10 +65,12 @@ public class QueryBuilder {
           throw new IllegalArgumentException("Dismax query must contain a list of valid subqueries");
         }
         float dismaxTieBreaker = DEFAULT_DISMAX_TIEBREAKER;
-        try {
-          dismaxTieBreaker = querySpec.getFloat("tiebreaker");
-        } catch (IllegalArgumentException iae) {
-          log.info("Using default dismax tiebreaker: " + iae.getMessage());
+        if (querySpec.containsKey("tiebreaker")) {
+          try {
+            dismaxTieBreaker = querySpec.getFloat("tiebreaker");
+          } catch (IllegalArgumentException iae) {
+            log.info("Using default dismax tiebreaker: " + iae.getMessage());
+          }
         }
         q = makeDismaxQuery(analyzer, subSpecs, dismaxTieBreaker);
         break;
@@ -130,10 +132,12 @@ public class QueryBuilder {
     }
     // now that we have the query object, set the boost on it.
     float boost = 1.0f; // default to no boost
-    try {
-      boost = querySpec.getFloat("boost");
-    } catch (IllegalArgumentException iae) {
-      log.warning("Couldn't set boost on query of type " + type + ": " + iae.getMessage());
+    if (querySpec.containsKey("boost")) {
+      try {
+        boost = querySpec.getFloat("boost");
+      } catch (IllegalArgumentException iae) {
+        log.warning("Couldn't set boost on query of type " + type + ": " + iae.getMessage());
+      }
     }
     q.setBoost(boost);
     return q;

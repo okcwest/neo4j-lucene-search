@@ -55,7 +55,7 @@ public class LuceneSearchFunctionalTest {
         RestRequest restRequest = new RestRequest(server.baseUri().resolve(MOUNT_POINT), CLIENT);
         JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.NO_RESULTS_FIXTURE);
         assertEquals(200, response.getStatus());
-        log.info("Got response " + response.getEntity());
+        log.fine("Got response " + response.getEntity());
     }
 
     @Test
@@ -64,7 +64,7 @@ public class LuceneSearchFunctionalTest {
         JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.SIM_PRESIDENT_OBAMA_FIXTURE);
         assertEquals(200, response.getStatus());
         String body = response.getEntity();
-        log.info("Got response " + body);
+        log.fine("Got response " + body);
         try {
             List responseList = objectMapper.readValue(body, List.class);
             assertEquals(6, responseList.size()); // 6 nodes about president or obama
@@ -80,7 +80,7 @@ public class LuceneSearchFunctionalTest {
         JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.PRESIDENT_OBAMA_MIN_SCORE_FIXTURE);
         assertEquals(200, response.getStatus());
         String body = response.getEntity();
-        log.info("Got response " + body);
+        log.fine("Got response " + body);
         try {
             List responseList = objectMapper.readValue(body, List.class);
             assertEquals(4, responseList.size()); // 4 high-quality nodes
@@ -96,7 +96,7 @@ public class LuceneSearchFunctionalTest {
       JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.DISMAX_OBAMA_ROMNEY_FIXTURE);
       assertEquals(200, response.getStatus());
       String body = response.getEntity();
-      log.info("Got dismax response " + body);
+      log.fine("Got dismax response " + body);
       try {
           List responseList = objectMapper.readValue(body, List.class);
           assertEquals(4, responseList.size()); // 4 high-quality nodes
@@ -119,7 +119,7 @@ public class LuceneSearchFunctionalTest {
       JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.BOOLEAN_FIXTURE);
       assertEquals(200, response.getStatus());
       String body = response.getEntity();
-      log.info("Got boolean response " + body);
+      log.fine("Got boolean response " + body);
       try {
           List responseList = objectMapper.readValue(body, List.class);
           assertEquals(5, responseList.size()); // 5 nodes, because we boost President.
@@ -136,7 +136,7 @@ public class LuceneSearchFunctionalTest {
       JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.PHRASE_FIXTURE);
       assertEquals(200, response.getStatus());
       String body = response.getEntity();
-      log.info("Got phrase response " + body);
+      log.fine("Got phrase response " + body);
       try {
           List responseList = objectMapper.readValue(body, List.class);
           assertEquals(2, responseList.size()); // exact matches only
@@ -152,7 +152,7 @@ public class LuceneSearchFunctionalTest {
       JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.PHRASE_SLOP_FIXTURE);
       assertEquals(200, response.getStatus());
       String body = response.getEntity();
-      log.info("Got phrase response with slop: " + body);
+      log.fine("Got phrase response with slop: " + body);
       try {
           List responseList = objectMapper.readValue(body, List.class);
           assertEquals(2, responseList.size()); // accept President Barack Obama too.
@@ -168,7 +168,7 @@ public class LuceneSearchFunctionalTest {
       JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.GEO_CONSTRAINED_FIXTURE);
       assertEquals(200, response.getStatus());
       String body = response.getEntity();
-      log.info("Got geo-constrained response with body: " + body);
+      log.fine("Got geo-constrained response with body: " + body);
       try {
           List responseList = objectMapper.readValue(body, List.class);
           assertEquals(2, responseList.size()); // one of them is in honolulu, too far.
@@ -184,7 +184,7 @@ public class LuceneSearchFunctionalTest {
       JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.GEO_SEARCH_FIXTURE);
       assertEquals(200, response.getStatus());
       String body = response.getEntity();
-      log.info("Got geo response with body: " + body);
+      log.fine("Got geo response with body: " + body);
       try {
           List responseList = objectMapper.readValue(body, List.class);
           assertEquals(3, responseList.size());
@@ -200,7 +200,7 @@ public class LuceneSearchFunctionalTest {
       JaxRsResponse response = restRequest.post("search", LuceneSearchTestFixtures.NUM_RANGE_SEARCH_FIXTURE);
       assertEquals(200, response.getStatus());
       String body = response.getEntity();
-      log.info("Got geo response with body: " + body);
+      log.fine("Got num range response with body: " + body);
       try {
           List responseList = objectMapper.readValue(body, List.class);
           assertEquals(2, responseList.size());
