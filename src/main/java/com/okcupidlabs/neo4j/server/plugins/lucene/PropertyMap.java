@@ -127,9 +127,10 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   * @param props The property map to find coordinates in
   * @param latKey The key where we expect a value for latitude
   * @param lonKey The key where we expect a value for longitude
-  * @return A map of {latKey: latitude, lonKey: longitude} where both values
-            are valid, or null if this map does not contain a valid set 
-            of coordinates at these keys.
+  * @throws IllegalArgumentException if the specified keys do not exist or 
+            have values that are not valid.
+  * @return A map of <code>{latKey: latitude, lonKey: longitude}</code> 
+            where the values are a valid lat/long
   */
   public PropertyMap<K, Double> getCoords(K latKey, K lonKey)
     throws IllegalArgumentException {
@@ -152,9 +153,11 @@ public class PropertyMap<K,V> extends HashMap<K,V> {
   * @param latKey The key where we expect a value for latitude
   * @param lonKey The key where we expect a value for longitude
   * @param distKey The key where we expect a value for distance
-  * @return A map of {latKey: latitude, lonKey: longitude, distKey: distance} 
-            where all values are valid, or null if this map does not 
-            contain a valid set of coordinates at these keys.
+  * @throws IllegalArgumentException if the specified keys do not exist or 
+            have values that are not valid.
+  * @return A map of <code>{latKey: latitude, lonKey: longitude, 
+            distKey: distance}</code> where the values are a valid lat/long
+            and radius
   */
   public PropertyMap<K, Double> getSearchRadius(K latKey, K lonKey, K distKey) 
     throws IllegalArgumentException {

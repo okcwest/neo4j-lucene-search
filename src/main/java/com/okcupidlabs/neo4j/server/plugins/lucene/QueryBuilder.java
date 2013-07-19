@@ -37,7 +37,7 @@ import java.util.logging.*;
     <p>Query spec should look like one of
      <code><blockquote>
     {"type": "DISMAX"<br>
-    &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+    &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1<br>
     &nbsp;&nbsp;"subqueries": [$QUERY0 $QUERY1 ... $QUERYN]&nbsp;&nbsp;&nbsp;&nbsp;// where $QUERYX is another valid query spec.<br>
     &nbsp;&nbsp;&nbsp;&nbsp;"tiebreaker": $tiebreakingvalue&nbsp;&nbsp;&nbsp;&nbsp;// this field is optional<br>
     &nbsp;&nbsp;}<br>
@@ -45,7 +45,7 @@ import java.util.logging.*;
     
      <code><blockquote>
     {"type": "BOOL"<br>
-    &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+    &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1<br>
     &nbsp;&nbsp;"clauses": [<br>
     &nbsp;&nbsp;&nbsp;&nbsp;{"query_spec": $QUERY0&nbsp;&nbsp;&nbsp;&nbsp;// where $QUERYX is another valid query spec.<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"occurs": "(MUST|SHOULD|MUST_NOT)"}<br>
@@ -57,7 +57,7 @@ import java.util.logging.*;
    
    <code><blockquote>
    {"type": "TERM"<br>
-   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1<br>
    &nbsp;&nbsp;"index_key": $FIELD_TO_SEARCH<br>
    &nbsp;&nbsp;"query": $TERM_TO_FIND<br>
    &nbsp;&nbsp;}<br>
@@ -65,7 +65,7 @@ import java.util.logging.*;
    
     <code><blockquote>
     {"type": "SIM"<br>
-    &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+    &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1<br>
     &nbsp;&nbsp;"index_key": $FIELD_TO_SEARCH<br>
     &nbsp;&nbsp;"query": $TERM_TO_FIND<br>
     &nbsp;&nbsp;}<br>
@@ -73,7 +73,7 @@ import java.util.logging.*;
 
    <code><blockquote>
    {"type": "PHRASE"<br>
-   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1<br>
    &nbsp;&nbsp;"index_key": $FIELD_TO_SEARCH<br>
    &nbsp;&nbsp;"query": $TERM_TO_FIND<br>
    &nbsp;&nbsp;"slop": $SLOP&nbsp;&nbsp;&nbsp;&nbsp;// optional<br>
@@ -82,7 +82,7 @@ import java.util.logging.*;
 
    <code><blockquote>
    {"type": "NUMRANGE"<br>
-   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1<br>
    &nbsp;&nbsp;"index_key": $LATITUDE_IN_DEGREES</br>
    &nbsp;&nbsp;"range": "($FROM,$TO]"&nbsp;&nbsp;&nbsp;&nbsp;//range can be bounded by () or [] to denote inclusivity<br>
    &nbsp;&nbsp;}<br>
@@ -90,7 +90,7 @@ import java.util.logging.*;
 
    <code><blockquote>
    {"type": "GEO"<br>
-   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1
+   &nbsp;&nbsp;"boost": $BOOST&nbsp;&nbsp;&nbsp;&nbsp;//optional, defaults to 1<br>
    &nbsp;&nbsp;"lat": $LATITUDE_IN_DEGREES</br>
    &nbsp;&nbsp;"lon": $LONGITUDE_IN_DEGREES<br>
    &nbsp;&nbsp;"dist": $RADIUS_IN_MILES</br>
