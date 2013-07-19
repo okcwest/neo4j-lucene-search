@@ -102,7 +102,7 @@ public class QueryBuilder {
   public QueryBuilder() {}; // blank constructor
 
   private static final float DEFAULT_DISMAX_TIEBREAKER = 0.1f;
-  public static final String LAT_KEY = "lat", LON_KEY = "lon"; // where to index the geo data
+  public static final String LAT_KEY = "lat", LON_KEY = "lon", DIST_KEY = "dist"; // where to index the geo data
   private static final Logger log = Logger.getLogger(QueryBuilder.class.getName());
   private static Pattern numRangePattern = Pattern.compile("^([\\(\\[])(.*),(.*)([\\)\\]])$");
   
@@ -152,10 +152,12 @@ public class QueryBuilder {
         q = makeNumRangeQuery(key, range);
         break;
       case GEO:
-        double lat = querySpec.getDouble("lat"); // these are required. they'll barf on a bad value and that's fine.
-        double lon = querySpec.getDouble("lon");
-        double dist = querySpec.getDouble("dist");
-        q = makeGeoQuery(lat, lon, dist);
+        // validate the geo. this will barf if the values are bogus and that is fine.
+        PropertyMap<String, Double> searchRadius = 
+          querySpec.getSearchRadius(LAT_KEY, LON_KEY, DIST_KEY);
+        q = makeGeoQuery( searchRadius.get(LAT_KEY), 
+                          searchRadius.get(LON_KEY), 
+                          searchRadius.get(DIST_KEY));
         break;
       case TERM:
         String numericKey = (String)querySpec.get("index_key");

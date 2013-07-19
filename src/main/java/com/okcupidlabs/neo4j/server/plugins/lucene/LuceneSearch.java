@@ -43,10 +43,10 @@ import java.util.logging.*;
 public class LuceneSearch {
 
     private static final String[] REQUIRED_SEARCH_PARAMETERS = {"query_spec", "index_name"};
-    private static final String[] REQUIRED_GEO_INDEX_PARAMETERS = {"index_name", "node_id", "lat", "lon"};
+    private static final String[] REQUIRED_GEO_INDEX_PARAMETERS = {"index_name", "node_id", QueryBuilder.LAT_KEY, QueryBuilder.LON_KEY};
     private static final String[] REQUIRED_NUM_INDEX_PARAMETERS = {"index_name", "node_id", "index_key", "index_value"};
     private static final Class defaultAnalyzerClass = WhitespaceAnalyzer.class; // don't instantiate
-    
+
     private final Logger log = Logger.getLogger(LuceneSearch.class.getName());
 
 
@@ -115,9 +115,7 @@ public class LuceneSearch {
         }
 
         // optionally trim off low-quality hits
-        // index query will need a float
         float minScore = 0;
-        // depending on how this is called, though, we may have a double or int in the properties
         if (properties.containsKey("min_score")) {
           try {
             minScore = properties.getFloat("min_score");
@@ -125,39 +123,19 @@ public class LuceneSearch {
             log.warning("Ignoring illegal value for min_score: "+iae.getMessage());
           }
         }
-        
-        //optionally use geo constraints.
-        double lat = 200, lon = 200, dist = -1; // init to nonsense values
 
-        if (properties.containsKey("lat") && properties.containsKey("lon") && properties.containsKey("dist")) {
+        // optionally use geo constraints.
+        // did the user try to set any?
+        PropertyMap<String, Double> searchRadius = null;
+        if (properties.containsKey(QueryBuilder.LAT_KEY) 
+          || properties.containsKey(QueryBuilder.LON_KEY) 
+          || properties.containsKey(QueryBuilder.DIST_KEY)) {
           try {
-            lat = properties.getDouble("lat");
-            if (lat > 90 || lat < -90)
-              throw new IllegalArgumentException("Latitude must be in the range 0 +- 90, but was "+lat);
-            // just warn; this arg is optional.
+            searchRadius = properties.getSearchRadius(QueryBuilder.LAT_KEY, 
+                                                      QueryBuilder.LON_KEY, 
+                                                      QueryBuilder.DIST_KEY);
           } catch (IllegalArgumentException iae) {
-            log.warning("Ignoring illegal value for latitude: "+iae.getMessage());
-            lat = 200;
-          }
-
-          try {
-            lon = properties.getDouble("lon");
-            if (lon > 180 || lon < -180)
-              throw new IllegalArgumentException("Longitude must be in the range 0 +- 180, but was "+lon);
-            // just warn; this arg is optional.
-          } catch (IllegalArgumentException iae) {
-            log.warning("Ignoring illegal value for longitude: "+iae.getMessage());
-            lon = 200;
-          }
-
-          try {
-            dist = properties.getDouble("dist");
-            if (dist <= 0)
-              throw new IllegalArgumentException("Distance must be a positive value in miles, but was "+dist);
-            // just warn; this arg is optional.
-          } catch (IllegalArgumentException iae) {
-            log.warning("Ignoring illegal value for distance: "+iae.getMessage());
-            dist = -1;
+            log.warning("Ignoring invalid geo constraints: "+iae.getMessage());
           }
         }
 
@@ -169,7 +147,7 @@ public class LuceneSearch {
 
         List<ScoredNode> searchResult = null;
         try {
-          searchResult = indexQuery(indexName, querySpec, minScore, lat, lon, dist);
+          searchResult = indexQuery(indexName, querySpec, minScore, searchRadius);
         } catch (IllegalArgumentException iae) {
           return output.badRequest(iae);
         }
@@ -283,17 +261,19 @@ public class LuceneSearch {
             return missingParameters(properties, REQUIRED_GEO_INDEX_PARAMETERS);
         }
         
-        // need an index_name, node, and coordinates.
+        // need an index_name, node, and coordinates from the caller
         String indexName = null;
         long nodeId = 0;
-        double lat = 200, lon = 200;
+        PropertyMap<String, Double> coords = null;
         try {
           indexName = (String)properties.get("index_name");
-          lat = properties.getDouble("lat");
-          lon = properties.getDouble("lon");
+          coords = properties.getCoords(QueryBuilder.LAT_KEY, 
+                                        QueryBuilder.LON_KEY);
           nodeId = properties.getInt("node_id");
         } catch (ClassCastException cce) {
           return output.badRequest(cce);
+        } catch (IllegalArgumentException iae) {
+          return output.badRequest(iae);
         }
         
         // get the named index
@@ -306,7 +286,7 @@ public class LuceneSearch {
         
         Node node = null;
         try {
-          node = geoIndex(this.service, index, nodeId, lat, lon);
+          node = geoIndex(this.service, index, nodeId, coords.get(QueryBuilder.LAT_KEY), coords.get(QueryBuilder.LON_KEY));
         } catch (NotFoundException e) {
           return output.badRequest(e);
         }
@@ -367,17 +347,17 @@ public class LuceneSearch {
 
     /**
      * Search the named index, building a query as specified.
+     * @param indexName     the name of the index to search
      * @param querySpec     a JSON representation of a query, which may be nested.
      * @param minScore  minimum similarity score to accept. 0 for no limit.
+     * @param searchRadius an optional PropertyMap containing geo constraint information
      * @return A list of nodes that match the query
      */
     private List<ScoredNode> indexQuery(
             final String indexName,
             final PropertyMap<String, Object> querySpec,
             final float minScore,
-            final double lat,
-            final double lon,
-            final double dist)
+            final PropertyMap<String, Double> searchRadius)
       throws IllegalArgumentException
     {
         // make sure the index contains the desired key
@@ -400,21 +380,20 @@ public class LuceneSearch {
           } 
           log.fine("Score " + score + " for node " + n + " passes threshold " + minScore);
           // are we checking distances?
-          if (lat != 200 && lon != 200 && dist != -1) {
-            // see if this node has a lat/lon associated
+          if (searchRadius != null && n.hasProperty(QueryBuilder.LAT_KEY) && n.hasProperty(QueryBuilder.LON_KEY)) {
+            PropertyMap<String, Double> nodeCoords = null;
             try {
-              double nLat = PropertyMap.getDoubleFromObject(n.getProperty("lat"));
-              double nLon = PropertyMap.getDoubleFromObject(n.getProperty("lon"));
-              if (nLat < -90 || nLat > 90) {
-                log.warning("Node has a bogus value of "+nLat+" for latitude");
-              } else if (nLon < -180 || nLon > 180) {
-                log.warning("Node has a bogus value of "+nLon+" for longitude");
-              } else if (!inRadius (lat, lon, nLat, nLon, dist)) {
+              nodeCoords = getNodeProps(n).getCoords(QueryBuilder.LAT_KEY, QueryBuilder.LON_KEY);
+              if (!inRadius ( searchRadius.get(QueryBuilder.LAT_KEY), 
+                              searchRadius.get(QueryBuilder.LON_KEY), 
+                              nodeCoords.get(QueryBuilder.LAT_KEY), 
+                              nodeCoords.get(QueryBuilder.LON_KEY), 
+                              searchRadius.get(QueryBuilder.DIST_KEY))) {
                 log.info("Dropping node that is too far away.");
                 continue;
               }
             } catch (IllegalArgumentException iae) {
-              // do nothing.
+              log.warning("Node "+n+" has coordinates that appear to be invalid.");
             }
           }
           log.fine("Adding node " + n + " with score " + score);
@@ -472,6 +451,17 @@ public class LuceneSearch {
         this.node = n;
         this.score = s;
       }
+    }
+    
+    // get all of a node's properties as a PropertyMap for typed retrieval.
+    private static PropertyMap<String, Object> getNodeProps(Node n) {
+      PropertyMap<String, Object> props = new PropertyMap<String, Object>();
+      if (n != null) {
+        for (String key : n.getPropertyKeys()) {
+          props.put(key, n.getProperty(key));
+        }
+      }
+      return props;
     }
     
     /**
